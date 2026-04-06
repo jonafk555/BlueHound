@@ -1,0 +1,21 @@
+# VULN-07: Never commit secrets or runtime artifacts
+.env
+*.env.local
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.DS_Store
+*.log
+*.sqlite3
+.pytest_cache/
+.coverage
+dist/
+build/
+*.egg-info/
+node_modules/
+
+# Docker
+docker-compose.override.yml
+.docker/

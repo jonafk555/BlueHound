@@ -1,0 +1,75 @@
+services:
+
+  # ── BlueHound API + Frontend ──────────────────────────────────
+  bluehound:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: bluehound:latest
+    container_name: bluehound
+    restart: unless-stopped
+    ports:
+      - "8443:8443"
+    env_file:
+      - .env                      # local secrets — never committed to VCS
+    environment:
+      BLUEHOUND_HOST: "0.0.0.0"   # must bind to all interfaces inside Docker
+      BLUEHOUND_PORT: "8443"
+      # If using local Ollama service below:
+      OLLAMA_URL: "http://ollama:11434"
+      # Comma-separated allowed CORS origins (from behind a reverse proxy, add your domain)
+      ALLOWED_ORIGINS: "http://localhost:8443,http://127.0.0.1:8443"
+    depends_on:
+      ollama:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python3", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8443/')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    volumes:
+      # Mount playbooks directory so rules can be edited without rebuilding
+      - ./playbooks:/app/playbooks:ro
+      # Optional: persist sample_data
+      - ./backend/sample_data:/app/backend/sample_data:ro
+    networks:
+      - bluehound-net
+    # Security: drop all Linux capabilities, read-only root fs
+    read_only: true
+    tmpfs:
+      - /tmp                      # tempfile needs writable /tmp
+    cap_drop:
+      - ALL
+
+  # ── Ollama (local LLM — optional) ────────────────────────────
+  # Remove this service if using OpenAI or running Ollama externally.
+  ollama:
+    image: ollama/ollama:latest
+    container_name: bluehound-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"             # only needed if you want host access to Ollama
+    volumes:
+      - ollama-models:/root/.ollama   # persist downloaded models
+    networks:
+      - bluehound-net
+    # Uncomment the following to enable GPU support (NVIDIA):
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+volumes:
+  ollama-models:
+
+networks:
+  bluehound-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/24  # isolated subnet

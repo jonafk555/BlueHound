@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="BlueHound — Graph-driven Windows threat hunting workbench inspired by BloodHound">
+    <title>BlueHound — Threat Hunting Workbench</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/main.css?v=1775353246">
+    <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+</head>
+<body>
+    <!-- ── Top Nav ─────────────────────────────────────────── -->
+    <nav id="top-nav">
+        <div class="nav-brand">
+            <svg class="brand-icon" viewBox="0 0 32 32" width="28" height="28">
+                <circle cx="16" cy="16" r="14" fill="none" stroke="url(#brandGrad)" stroke-width="2.5"/>
+                <circle cx="16" cy="10" r="3" fill="#4fc3f7"/>
+                <circle cx="10" cy="20" r="2.5" fill="#81d4fa"/>
+                <circle cx="22" cy="20" r="2.5" fill="#81d4fa"/>
+                <line x1="16" y1="13" x2="10" y2="17.5" stroke="#4fc3f7" stroke-width="1.5" opacity="0.7"/>
+                <line x1="16" y1="13" x2="22" y2="17.5" stroke="#4fc3f7" stroke-width="1.5" opacity="0.7"/>
+                <line x1="10" y1="20" x2="22" y2="20" stroke="#29b6f6" stroke-width="1" opacity="0.4"/>
+                <defs><linearGradient id="brandGrad" x1="0" y1="0" x2="32" y2="32">
+                    <stop offset="0%" stop-color="#4fc3f7"/><stop offset="100%" stop-color="#0288d1"/>
+                </linearGradient></defs>
+            </svg>
+            <span class="brand-text">BlueHound</span>
+            <span class="brand-tag">Threat Hunter</span>
+        </div>
+        <div class="nav-tabs">
+            <button class="nav-tab active" data-panel="graph" id="tab-graph">
+                <svg viewBox="0 0 20 20" width="16"><circle cx="5" cy="5" r="2.5" fill="currentColor"/><circle cx="15" cy="5" r="2.5" fill="currentColor"/><circle cx="10" cy="15" r="2.5" fill="currentColor"/><line x1="5" y1="7" x2="10" y2="13" stroke="currentColor" stroke-width="1.2"/><line x1="15" y1="7" x2="10" y2="13" stroke="currentColor" stroke-width="1.2"/></svg>
+                Graph View
+            </button>
+            <button class="nav-tab" data-panel="tree" id="tab-tree">
+                <svg viewBox="0 0 20 20" width="16"><rect x="7" y="1" width="6" height="4" rx="1" fill="currentColor"/><rect x="2" y="9" width="6" height="4" rx="1" fill="currentColor"/><rect x="12" y="9" width="6" height="4" rx="1" fill="currentColor"/><line x1="10" y1="5" x2="10" y2="7" stroke="currentColor" stroke-width="1.2"/><line x1="5" y1="7" x2="15" y2="7" stroke="currentColor" stroke-width="1.2"/><line x1="5" y1="7" x2="5" y2="9" stroke="currentColor" stroke-width="1.2"/><line x1="15" y1="7" x2="15" y2="9" stroke="currentColor" stroke-width="1.2"/></svg>
+                Process Tree
+            </button>
+            <button class="nav-tab" data-panel="timeline" id="tab-timeline">
+                <svg viewBox="0 0 20 20" width="16"><circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="10" y1="10" x2="10" y2="5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><line x1="10" y1="10" x2="14" y2="12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="10" cy="10" r="1.2" fill="currentColor"/></svg>
+                Timeline
+            </button>
+            <button class="nav-tab" data-panel="hunt" id="tab-hunt">
+                <svg viewBox="0 0 20 20" width="16"><circle cx="8" cy="8" r="5" fill="none" stroke="currentColor" stroke-width="2"/><line x1="12" y1="12" x2="18" y2="18" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
+                Threat Hunt
+            </button>
+            <button class="nav-tab" data-panel="query" id="tab-query">
+                <svg viewBox="0 0 20 20" width="16"><rect x="2" y="3" width="16" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="5" y="13" font-size="8" fill="currentColor" font-family="monospace">&gt;_</text></svg>
+                Query Builder
+            </button>
+            <button class="nav-tab" data-panel="llm" id="tab-llm">
+                <svg viewBox="0 0 20 20" width="16"><path d="M10 2 L18 7 L18 13 L10 18 L2 13 L2 7 Z" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="10" cy="10" r="3" fill="currentColor" opacity="0.5"/></svg>
+                LLM Analyzer
+            </button>
+        </div>
+        <div class="nav-actions">
+            <label class="upload-btn" id="upload-btn">
+                <input type="file" accept=".json,.csv,.xml,.log" id="file-input" hidden>
+                <svg viewBox="0 0 20 20" width="16"><path d="M10 2 L10 14 M5 7 L10 2 L15 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M3 14 L3 17 L17 17 L17 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                Upload Logs
+            </label>
+            <div class="sample-dropdown" id="sample-dropdown">
+                <button class="sample-btn" id="load-sample-btn">Load Demo ▾</button>
+                <div class="sample-menu" id="sample-menu">
+                    <button class="sample-option" data-dataset="enterprise">🏢 Enterprise (Clean)</button>
+                    <button class="sample-option" data-dataset="redteam">🔴 Red Team (Sysmon)</button>
+                    <button class="sample-option" data-dataset="chaos">💀 Chaos (Real-world)</button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- ── Stats Bar ───────────────────────────────────────── -->
+    <div id="stats-bar" class="stats-bar hidden">
+        <div class="stat-item"><span class="stat-label">Events</span><span class="stat-value" id="stat-events">0</span></div>
+        <div class="stat-item"><span class="stat-label">Nodes</span><span class="stat-value" id="stat-nodes">0</span></div>
+        <div class="stat-item"><span class="stat-label">Edges</span><span class="stat-value" id="stat-edges">0</span></div>
+        <div class="stat-item stat-critical"><span class="stat-label">Critical</span><span class="stat-value" id="stat-critical">0</span></div>
+        <div class="stat-item stat-high"><span class="stat-label">High</span><span class="stat-value" id="stat-high">0</span></div>
+        <div class="stat-item stat-medium"><span class="stat-label">Medium</span><span class="stat-value" id="stat-medium">0</span></div>
+        <div class="stat-item"><span class="stat-label">Findings</span><span class="stat-value" id="stat-findings">0</span></div>
+    </div>
+
+    <!-- ── Main Content ────────────────────────────────────── -->
+    <main id="main-content">
+        <!-- Landing / Empty State -->
+        <div id="panel-landing" class="panel active">
+            <div class="landing-content">
+                <div class="landing-icon">
+                    <svg viewBox="0 0 120 120" width="120" height="120">
+                        <circle cx="60" cy="60" r="55" fill="none" stroke="url(#landGrad)" stroke-width="2" stroke-dasharray="8 4" opacity="0.4">
+                            <animateTransform attributeName="transform" type="rotate" from="0 60 60" to="360 60 60" dur="30s" repeatCount="indefinite"/>
+                        </circle>
+                        <circle cx="60" cy="25" r="8" fill="#4fc3f7" opacity="0.9"><animate attributeName="r" values="8;10;8" dur="2s" repeatCount="indefinite"/></circle>
+                        <circle cx="30" cy="75" r="6" fill="#f44336" opacity="0.8"><animate attributeName="r" values="6;8;6" dur="2.5s" repeatCount="indefinite"/></circle>
+                        <circle cx="90" cy="75" r="7" fill="#ff9800" opacity="0.8"><animate attributeName="r" values="7;9;7" dur="3s" repeatCount="indefinite"/></circle>
+                        <circle cx="45" cy="50" r="4" fill="#81d4fa" opacity="0.6"/>
+                        <circle cx="75" cy="50" r="4" fill="#81d4fa" opacity="0.6"/>
+                        <line x1="60" y1="33" x2="45" y2="47" stroke="#4fc3f7" stroke-width="1.5" opacity="0.5"/>
+                        <line x1="60" y1="33" x2="75" y2="47" stroke="#4fc3f7" stroke-width="1.5" opacity="0.5"/>
+                        <line x1="45" y1="53" x2="30" y2="69" stroke="#f44336" stroke-width="1.5" opacity="0.5"/>
+                        <line x1="75" y1="53" x2="90" y2="69" stroke="#ff9800" stroke-width="1.5" opacity="0.5"/>
+                        <line x1="30" y1="75" x2="90" y2="75" stroke="#29b6f6" stroke-width="1" opacity="0.3"/>
+                        <defs><linearGradient id="landGrad" x1="0" y1="0" x2="120" y2="120">
+                            <stop offset="0%" stop-color="#4fc3f7"/><stop offset="100%" stop-color="#f44336"/>
+                        </linearGradient></defs>
+                    </svg>
+                </div>
+                <h1>BlueHound</h1>
+                <p class="landing-subtitle">Graph-Driven Windows Threat Hunting</p>
+                <p class="landing-desc">Upload Windows event logs (Sysmon, Security, PowerShell) or load the demo dataset to begin hunting.</p>
+                <div class="landing-actions">
+                    <label class="btn-primary" for="file-input">
+                        Upload Log File
+                    </label>
+                    <div class="sample-dropdown" id="landing-sample-dropdown">
+                        <button class="btn-secondary" id="landing-demo-btn">Load Demo Dataset ▾</button>
+                        <div class="sample-menu" id="landing-sample-menu">
+                            <button class="sample-option" data-dataset="enterprise">🏢 Enterprise (Clean)</button>
+                            <button class="sample-option" data-dataset="redteam">🔴 Red Team (Sysmon)</button>
+                            <button class="sample-option" data-dataset="chaos">💀 Chaos (Real-world)</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="landing-formats">
+                    Supports: <span>JSON</span> <span>CSV</span> <span>XML</span> <span>LOG</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Graph Panel -->
+        <div id="panel-graph" class="panel">
+            <div id="graph-container">
+                <svg id="graph-svg"></svg>
+            </div>
+            <div id="graph-controls">
+                <button id="graph-zoom-in" title="Zoom In">+</button>
+                <button id="graph-zoom-out" title="Zoom Out">−</button>
+                <button id="graph-reset" title="Reset View">⟲</button>
+                <div class="graph-legend">
+                    <div class="legend-item"><span class="dot dot-critical"></span>Critical</div>
+                    <div class="legend-item"><span class="dot dot-high"></span>High</div>
+                    <div class="legend-item"><span class="dot dot-medium"></span>Medium</div>
+                    <div class="legend-item"><span class="dot dot-low"></span>Low</div>
+                    <div class="legend-item"><span class="dot dot-benign"></span>Benign</div>
+                    <div class="legend-item"><span class="dot dot-network"></span>Network</div>
+                </div>
+            </div>
+            <!-- Node Detail Sidebar -->
+            <div id="node-detail" class="detail-sidebar hidden">
+                <button id="detail-close" class="detail-close">✕</button>
+                <div id="detail-content"></div>
+            </div>
+        </div>
+
+        <!-- Process Tree Panel -->
+        <div id="panel-tree" class="panel">
+            <div id="tree-container"></div>
+        </div>
+
+        <!-- Timeline Panel -->
+        <div id="panel-timeline" class="panel">
+            <div class="timeline-layout">
+                <div class="timeline-controls">
+                    <h2>Event Timeline</h2>
+                    <div class="timeline-filters">
+                        <div class="tl-filter-group">
+                            <label>Host</label>
+                            <select id="tl-filter-host"><option value="">All Hosts</option></select>
+                        </div>
+                        <div class="tl-filter-group">
+                            <label>Severity</label>
+                            <select id="tl-filter-sev">
+                                <option value="">All</option>
+                                <option value="malicious">Malicious Only</option>
+                                <option value="critical">Critical</option>
+                                <option value="high">High</option>
+                                <option value="medium">Medium</option>
+                                <option value="low">Low</option>
+                                <option value="benign">Benign Only</option>
+                            </select>
+                        </div>
+                        <div class="tl-filter-group">
+                            <label>Process</label>
+                            <select id="tl-filter-proc"><option value="">All Processes</option></select>
+                        </div>
+                        <div class="tl-time-display">
+                            <span id="tl-time-label">Full Range</span>
+                            <button class="tl-reset-btn" id="tl-reset-zoom">Reset Zoom</button>
+                        </div>
+                    </div>
+                </div>
+                <div id="timeline-main" class="timeline-main">
+                    <svg id="timeline-svg"></svg>
+                </div>
+                <div id="timeline-context" class="timeline-context">
+                    <svg id="timeline-brush-svg"></svg>
+                </div>
+                <div id="timeline-detail" class="timeline-detail hidden">
+                    <div id="timeline-detail-content"></div>
+                </div>
+            </div>
+            <div id="tl-tooltip" class="tl-tooltip hidden"></div>
+        </div>
+
+        <!-- Threat Hunt Panel -->
+        <div id="panel-hunt" class="panel">
+            <div class="hunt-layout">
+                <div class="hunt-summary" id="hunt-summary"></div>
+                <div class="hunt-findings" id="hunt-findings"></div>
+            </div>
+        </div>
+
+        <!-- Query Builder Panel -->
+        <div id="panel-query" class="panel">
+            <div class="query-layout">
+                <div class="query-builder" id="query-builder">
+                    <h2>Query Builder</h2>
+                    <div class="query-format-selector">
+                        <button class="fmt-btn active" data-fmt="kql">KQL</button>
+                        <button class="fmt-btn" data-fmt="spl">SPL</button>
+                        <button class="fmt-btn" data-fmt="sigma">Sigma</button>
+                    </div>
+                    <div class="query-filters" id="query-filters"></div>
+                    <button class="btn-primary" id="generate-query-btn">Generate Query</button>
+                    <div class="query-suggestions" id="query-suggestions"></div>
+                </div>
+                <div class="query-output">
+                    <div class="query-output-header">
+                        <h3>Generated Query</h3>
+                        <button class="copy-btn" id="copy-query-btn">Copy</button>
+                    </div>
+                    <pre id="query-result" class="code-block"></pre>
+                </div>
+            </div>
+        </div>
+
+        <!-- LLM Panel -->
+        <div id="panel-llm" class="panel">
+            <div class="llm-root">
+
+                <!-- ① Top strip: Session Summary (compact, always visible) -->
+                <div class="llm-summary-strip" id="llm-summary-section">
+                    <div class="llm-sum-header">
+                        <span class="llm-sum-title">🧠 Session Summary</span>
+                        <div class="llm-sum-actions">
+                            <button class="llm-sum-toggle" id="llm-sum-toggle-btn" title="Expand/Collapse">⌄</button>
+                            <button class="btn-secondary" id="llm-regen-summary-btn">Re-generate</button>
+                        </div>
+                    </div>
+                    <div id="llm-summary-result" class="llm-sum-body">
+                        <p class="llm-sum-placeholder">Load a log file to auto-generate an AI threat summary.</p>
+                    </div>
+                </div>
+
+                <!-- ② Bottom: Left input + Right result side-by-side -->
+                <div class="llm-workspace">
+
+                    <!-- Left: Analyzer input -->
+                    <div class="llm-left">
+                        <div class="llm-left-header">
+                            <h3 class="llm-left-title">🔬 Event Analyzer</h3>
+                            <span class="llm-hint">Ctrl+Enter to analyze</span>
+                        </div>
+
+                        <div class="llm-ctx-grid">
+                            <input id="llm-ctx-eventid"  class="llm-ctx-input" placeholder="Event ID" />
+                            <input id="llm-ctx-process"  class="llm-ctx-input" placeholder="Process" />
+                            <input id="llm-ctx-host"     class="llm-ctx-input" placeholder="Host" />
+                            <input id="llm-ctx-user"     class="llm-ctx-input" placeholder="User" />
+                        </div>
+
+                        <textarea id="llm-cmdline-input"
+                            placeholder="Paste command line, PowerShell, or event detail…"></textarea>
+
+                        <div class="llm-btn-row">
+                            <button class="btn-primary" id="llm-analyze-btn">⚡ Analyze</button>
+                            <button class="btn-ghost" id="llm-clear-btn">Clear</button>
+                        </div>
+
+                        <div class="llm-quick-picks" id="llm-quick-picks"></div>
+                    </div>
+
+                    <!-- Right: Analysis result -->
+                    <div class="llm-right" id="llm-result">
+                        <div class="llm-right-placeholder">
+                            <div class="llm-placeholder-icon">🔍</div>
+                            <p>Paste a command line and click <strong>Analyze</strong>,<br>or click any event in the Timeline / Graph.</p>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+
+    </main>
+
+    <!-- ── Loading Overlay ─────────────────────────────────── -->
+    <div id="loading-overlay" class="loading-overlay hidden">
+        <div class="loading-spinner"></div>
+        <p class="loading-text">Analyzing logs...</p>
+    </div>
+
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="/js/app.js?v=1775352926"></script>
+    <script src="/js/graph.js?v=1775352926"></script>
+    <script src="/js/process_tree.js?v=1775352926"></script>
+    <script src="/js/query_panel.js?v=1775352926"></script>
+    <script src="/js/hunt_panel.js?v=1775352926"></script>
+    <script src="/js/llm_panel.js?v=1775352926"></script>
+    <script src="/js/timeline.js?v=1775352926"></script>
+</body>
+</html>

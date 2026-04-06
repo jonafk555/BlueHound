@@ -1,0 +1,274 @@
+version: "1.0"
+name: "BlueHound Windows Threat Hunting Playbook"
+description: "Detection rules for Windows threat hunting, mapped to MITRE ATT&CK"
+
+rules:
+  # ── Execution ──────────────────────────────────────────────
+  - id: TH-001
+    name: "Encoded PowerShell Execution"
+    mitre: T1059.001
+    tactic: Execution
+    severity: HIGH
+    match:
+      process_name: ["powershell.exe", "pwsh.exe"]
+      commandline_regex: "(?i)(-[Ee]nc\\b|-[Ee]ncodedCommand)"
+    description: "Detects base64-encoded PowerShell commands, commonly used to obfuscate malicious scripts."
+    hunt_guidance: "Decode the base64 payload and inspect for download cradles, AMSI bypass, or credential theft."
+
+  - id: TH-002
+    name: "PowerShell Download Cradle"
+    mitre: T1059.001
+    tactic: Execution
+    severity: HIGH
+    match:
+      process_name: ["powershell.exe", "pwsh.exe"]
+      commandline_regex: "(?i)(Invoke-WebRequest|IWR|Invoke-RestMethod|IRM|Net\\.WebClient|DownloadString|DownloadFile|Start-BitsTransfer|wget|curl)"
+    description: "PowerShell used to download content from the internet."
+    hunt_guidance: "Verify the URL, check if the downloaded file was executed, and inspect network connections."
+
+  - id: TH-003
+    name: "AMSI Bypass Attempt"
+    mitre: T1562.001
+    tactic: "Defense Evasion"
+    severity: CRITICAL
+    match:
+      process_name: ["powershell.exe", "pwsh.exe"]
+      commandline_regex: "(?i)(AmsiUtils|amsiInitFailed|Bypass|SetValue.*AmsiEnable|Reflection\\.Assembly)"
+    description: "Attempt to bypass the Antimalware Scan Interface (AMSI)."
+    hunt_guidance: "This is almost always malicious. Investigate the full script block and parent process."
+
+  # ── Living off the Land Binaries (LOLBAS) ─────────────────
+  - id: TH-004
+    name: "LOLBAS Proxy Execution — MSHTA"
+    mitre: T1218.005
+    tactic: "Defense Evasion"
+    severity: HIGH
+    match:
+      process_name: ["mshta.exe"]
+      commandline_regex: "(?i)(http|javascript|vbscript|about)"
+    description: "MSHTA used to proxy execute scripts, often from remote URLs."
+    hunt_guidance: "Check if content was fetched remotely. Inspect child processes spawned by MSHTA."
+
+  - id: TH-005
+    name: "LOLBAS Proxy Execution — Rundll32"
+    mitre: T1218.011
+    tactic: "Defense Evasion"
+    severity: MEDIUM
+    match:
+      process_name: ["rundll32.exe"]
+      commandline_regex: "(?i)(javascript|http|shell32|advpack|ieadvpack|setupapi|syssetup|url\\.dll|zipfldr)"
+    description: "Rundll32 used to load suspicious DLLs or execute scripts."
+    hunt_guidance: "Verify the DLL path and export function. Non-standard DLLs loaded via rundll32 are suspicious."
+
+  - id: TH-006
+    name: "LOLBAS Proxy Execution — Regsvr32"
+    mitre: T1218.010
+    tactic: "Defense Evasion"
+    severity: HIGH
+    match:
+      process_name: ["regsvr32.exe"]
+      commandline_regex: "(?i)(/s|/i:http|scrobj\\.dll)"
+    description: "Regsvr32 used to register COM objects, potentially loading remote scriptlets."
+    hunt_guidance: "Check for /i with URLs (Squiblydoo attack). Inspect network connections."
+
+  - id: TH-007
+    name: "Certutil Download or Decode"
+    mitre: T1140
+    tactic: "Defense Evasion"
+    severity: HIGH
+    match:
+      process_name: ["certutil.exe"]
+      commandline_regex: "(?i)(-urlcache|-decode|-decodehex|http)"
+    description: "Certutil abused to download files or decode base64/hex payloads."
+    hunt_guidance: "Inspect downloaded file path and content. Certutil used for downloads is nearly always malicious."
+
+  - id: TH-008
+    name: "BITSAdmin File Transfer"
+    mitre: T1197
+    tactic: "Defense Evasion"
+    severity: MEDIUM
+    match:
+      process_name: ["bitsadmin.exe"]
+      commandline_regex: "(?i)(/transfer|/addfile|http)"
+    description: "BITSAdmin used to download files via BITS jobs."
+    hunt_guidance: "Inspect the URL and destination path. BITS jobs can survive reboots."
+
+  # ── Credential Access ─────────────────────────────────────
+  - id: TH-009
+    name: "LSASS Memory Access"
+    mitre: T1003.001
+    tactic: "Credential Access"
+    severity: CRITICAL
+    match:
+      process_name: ["procdump.exe", "procdump64.exe", "rundll32.exe", "taskmgr.exe"]
+      commandline_regex: "(?i)(lsass|comsvcs\\.dll.*MiniDump)"
+    description: "Attempt to dump LSASS process memory for credential extraction."
+    hunt_guidance: "Verify legitimacy with sysadmin. Cross-reference with Sysmon EID 10 (ProcessAccess to lsass)."
+
+  - id: TH-010
+    name: "Mimikatz Indicators"
+    mitre: T1003.001
+    tactic: "Credential Access"
+    severity: CRITICAL
+    match:
+      commandline_regex: "(?i)(sekurlsa|kerberos::list|crypto::capi|privilege::debug|token::elevate|lsadump|dcsync|logonpasswords)"
+    description: "Command-line indicators consistent with Mimikatz credential dumping."
+    hunt_guidance: "This is a high-confidence indicator. Investigate the full process tree and all network activity from this host."
+
+  - id: TH-011
+    name: "DCSync Attack"
+    mitre: T1003.006
+    tactic: "Credential Access"
+    severity: CRITICAL
+    match:
+      event_id: [4662]
+      properties_regex: "(?i)(DS-Replication-Get-Changes|1131f6aa-9c07-11d1-f79f|1131f6ad-9c07-11d1-f79f|89e95b76-444d-4c62-991a)"
+    description: "Replication rights (DS-Replication-Get-Changes / DS-Replication-Get-Changes-All) exercised by a non-DC account. Core indicator of DCSync attack."
+    hunt_guidance: "Check if the requesting account (UserName) is a Domain Controller machine account. If not, treat as confirmed DCSync. Reset krbtgt password twice immediately."
+
+  # ── Lateral Movement ──────────────────────────────────────
+  - id: TH-012
+    name: "PsExec-style Remote Execution"
+    mitre: T1021.002
+    tactic: "Lateral Movement"
+    severity: HIGH
+    match:
+      process_name: ["psexec.exe", "psexesvc.exe", "PSEXESVC.exe"]
+    description: "PsExec or PsExec-like service detected, indicating remote command execution."
+    hunt_guidance: "Check the source host and user account. Verify if this is authorized admin activity."
+
+  - id: TH-013
+    name: "WMI Remote Process Creation"
+    mitre: T1047
+    tactic: Execution
+    severity: MEDIUM
+    match:
+      process_name: ["wmic.exe", "wmiprvse.exe"]
+      commandline_regex: "(?i)(process.*call.*create|/node:)"
+    description: "WMI used to create processes, potentially on remote hosts."
+    hunt_guidance: "WMI remote execution is a common lateral movement technique. Check target hostname."
+
+  - id: TH-014
+    name: "Remote Service Creation via sc.exe"
+    mitre: T1543.003
+    tactic: "Persistence"
+    severity: HIGH
+    match:
+      process_name: ["sc.exe"]
+      commandline_regex: "(?i)(\\\\\\\\.*create|\\\\\\\\.*config|\\\\\\\\.*start)"
+    description: "sc.exe used to create or modify services on remote hosts."
+    hunt_guidance: "Remote service creation is a classic lateral movement/persistence technique."
+
+  # ── Persistence ────────────────────────────────────────────
+  - id: TH-015
+    name: "Scheduled Task Persistence"
+    mitre: T1053.005
+    tactic: "Persistence"
+    severity: MEDIUM
+    match:
+      process_name: ["schtasks.exe"]
+      commandline_regex: "(?i)(/create|/change)"
+    description: "Scheduled task created or modified, potential persistence mechanism."
+    hunt_guidance: "Inspect the scheduled action and trigger. Check if this is authorized."
+
+  - id: TH-016
+    name: "Registry Run Key Modification"
+    mitre: T1547.001
+    tactic: "Persistence"
+    severity: HIGH
+    match:
+      process_name: ["reg.exe"]
+      commandline_regex: "(?i)(add.*Run|add.*RunOnce)"
+    description: "Registry Run/RunOnce key modified for persistence."
+    hunt_guidance: "Inspect the binary path in the registry value. Cross-ref with file creation events."
+
+  - id: TH-017
+    name: "New Service Installation"
+    mitre: T1543.003
+    tactic: "Persistence"
+    severity: MEDIUM
+    match:
+      event_id: [7045]
+    description: "New Windows service installed — potential persistence or privilege escalation."
+    hunt_guidance: "Verify the service binary path. Unsigned or temp-path binaries are suspicious."
+
+  # ── Discovery ─────────────────────────────────────────────
+  - id: TH-018
+    name: "Internal Network Reconnaissance"
+    mitre: T1018
+    tactic: "Discovery"
+    severity: LOW
+    match:
+      process_name: ["net.exe", "net1.exe", "nltest.exe", "dsquery.exe"]
+      commandline_regex: "(?i)(view|user|group|domain|trust|dclist|localgroup.*admin)"
+    description: "Network and domain enumeration commands."
+    hunt_guidance: "Isolated occurrence may be admin activity. Multiple in sequence signals reconnaissance."
+
+  - id: TH-019
+    name: "System Information Discovery"
+    mitre: T1082
+    tactic: "Discovery"
+    severity: LOW
+    match:
+      process_name: ["systeminfo.exe", "hostname.exe", "whoami.exe", "ipconfig.exe"]
+    description: "System information gathering commands."
+    hunt_guidance: "Flag if multiple discovery commands executed in quick succession from same parent."
+
+  # ── Command and Control ───────────────────────────────────
+  - id: TH-020
+    name: "DNS over HTTPS or Uncommon DNS"
+    mitre: T1071.004
+    tactic: "Command and Control"
+    severity: MEDIUM
+    match:
+      commandline_regex: "(?i)(dns\\.google|cloudflare-dns\\.com|doh\\.opendns\\.com|1\\.1\\.1\\.1\\/dns-query)"
+    description: "DNS-over-HTTPS detected, potentially used to evade DNS monitoring."
+    hunt_guidance: "Check which process is making DoH queries. Uncommon for standard applications."
+
+  - id: TH-021
+    name: "Named Pipe Impersonation"
+    mitre: T1134.001
+    tactic: "Privilege Escalation"
+    severity: HIGH
+    match:
+      event_id: [17, 18]
+      commandline_regex: "(?i)(pipe|impersonate)"
+    description: "Named pipe creation or connection, potential token impersonation."
+    hunt_guidance: "Check the pipe name and owning process. Tools like PrintSpoofer use named pipes."
+
+  # ── Suspicious Process Relationships ──────────────────────
+  - id: TH-022
+    name: "Unusual Parent-Child Relationship"
+    mitre: T1055
+    tactic: "Defense Evasion"
+    severity: HIGH
+    match:
+      parent_child_anomaly: true
+      suspicious_parents:
+        "cmd.exe":       ["services.exe", "lsass.exe", "smss.exe"]
+        "powershell.exe": ["services.exe", "lsass.exe", "smss.exe", "wmiprvse.exe"]
+        "whoami.exe":    ["services.exe", "lsass.exe"]
+        "net.exe":       ["lsass.exe", "smss.exe"]
+    description: "Process spawned by an unusual parent process."
+    hunt_guidance: "Unusual parent-child relationships often indicate injection, service exploitation, or lateral movement."
+
+  - id: TH-023
+    name: "Unsigned Binary Execution from Temp"
+    mitre: T1204.002
+    tactic: "Execution"
+    severity: HIGH
+    match:
+      process_path_regex: "(?i)(\\\\temp\\\\|\\\\tmp\\\\|\\\\appdata\\\\local\\\\temp|\\\\downloads\\\\)"
+    description: "Executable run from temporary or download directory."
+    hunt_guidance: "Check file hash against threat intel. Binaries in temp directories are high-risk."
+
+  - id: TH-024
+    name: "Process Hollowing / Injection Indicators"
+    mitre: T1055.012
+    tactic: "Defense Evasion"
+    severity: CRITICAL
+    match:
+      event_id: [8, 10]
+      commandline_regex: "(?i)(NtUnmapViewOfSection|WriteProcessMemory|VirtualAllocEx|CreateRemoteThread)"
+    description: "API calls associated with process hollowing or injection."
+    hunt_guidance: "High-confidence indicator of advanced attack. Full memory forensics recommended."
