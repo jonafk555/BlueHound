@@ -18,6 +18,17 @@
 
 ## 📸 預覽
 
+<img width="1502" height="818" alt="image" src="https://github.com/user-attachments/assets/8b1a8438-3733-4ded-b0c1-144c49e7a7bd" />
+
+<img width="1502" height="818" alt="image" src="https://github.com/user-attachments/assets/abc5785f-8971-4e28-a78b-27eacee5fb93" />
+
+<img width="1502" height="818" alt="image" src="https://github.com/user-attachments/assets/38937000-1565-4dd5-9f6b-5c94a53b8a3d" />
+
+<img width="1502" height="818" alt="image" src="https://github.com/user-attachments/assets/71e3de54-9eeb-4269-8aab-da03bc41fa94" />
+
+<img width="1502" height="818" alt="image" src="https://github.com/user-attachments/assets/4e6e5e95-3aa2-4981-9fe8-8192d5981014" />
+
+
 > 上傳 Windows / Linux 安全日誌 → 自動解析 → 規則引擎偵測 → LLM 語意預掃 → 圖學視覺化 → 產出獵捕報告
 
 ---
