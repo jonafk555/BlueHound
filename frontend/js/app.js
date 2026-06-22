@@ -8,6 +8,7 @@ const BlueHound = {
         findings: [],
         graph: null,
         facets: {},
+        llmPrescan: null,
         activePanel: 'landing',
         selectedFormat: 'kql',
     },
@@ -77,13 +78,22 @@ const BlueHound = {
     },
 
     async uploadFile(file) {
-        this.showLoading('Ingesting & analyzing logs...');
+        const MAX_SIZE_MB = 200;
+        const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024;
+        if (file.size > MAX_SIZE_BYTES) {
+            this._showToast(`File too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Maximum is ${MAX_SIZE_MB} MB.`, 'error');
+            return;
+        }
+        const sizeMB = (file.size / 1024 / 1024).toFixed(1);
+        const isLarge = file.size > 50 * 1024 * 1024;
+        this.showLoading(isLarge
+            ? `Uploading ${sizeMB} MB — this may take a moment...`
+            : 'Ingesting & analyzing logs...');
         try {
             const form = new FormData();
             form.append('file', file);
             const resp = await fetch('/api/upload', { method: 'POST', body: form });
             if (!resp.ok) {
-                // QA FIX: parse JSON error body instead of showing raw text
                 let msg = `Server error (${resp.status})`;
                 try { const e = await resp.json(); msg = e.error || msg; } catch (_) {}
                 throw new Error(msg);
@@ -120,6 +130,7 @@ const BlueHound = {
         this.state.findings = data.findings || [];
         this.state.graph = data.graph || { nodes: [], edges: [] };
         this.state.facets = data.facets || {};
+        this.state.llmPrescan = data.llm_prescan || null;
 
         // Update stats
         this.updateStats(data);
@@ -131,7 +142,7 @@ const BlueHound = {
         ProcessTree.render(this.state.graph);
         HuntPanel.render(this.state.findings);
         QueryPanel.init(this.state.facets, this.state.findings);
-        LLMPanel.init(this.state.events, this.state.findings);
+        LLMPanel.init(this.state.events, this.state.findings, this.state.llmPrescan);
         TimelineView.init(this.state.events, this.state.findings);
 
         // Switch to graph

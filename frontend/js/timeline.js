@@ -41,11 +41,21 @@ const TimelineView = {
 
     // ── Enrich raw events with finding severity ────────────
     enrichEvents() {
-        const findMap = {};
+        // Index findings by process_guid (per-event rules)
+        const findByGuid = {};
+        // Index findings by source_ip (correlation rules like TH-CORR-*)
+        const findBySrcIp = {};
         this.findings.forEach(f => {
             const g = f.process_guid || '';
-            if (!findMap[g]) findMap[g] = [];
-            findMap[g].push(f);
+            if (g) {
+                if (!findByGuid[g]) findByGuid[g] = [];
+                findByGuid[g].push(f);
+            }
+            // Correlation findings (TH-CORR-*) match all events from same source_ip
+            if (f.rule_id && f.rule_id.startsWith('TH-CORR') && f.source_ip) {
+                if (!findBySrcIp[f.source_ip]) findBySrcIp[f.source_ip] = [];
+                findBySrcIp[f.source_ip].push(f);
+            }
         });
 
         this.enriched = this.events
@@ -54,7 +64,12 @@ const TimelineView = {
                 const ts = new Date(e.timestamp);
                 if (isNaN(ts)) return null;
                 const guid  = e.process_guid || '';
-                const rules = findMap[guid]  || [];
+                const srcIp = e.source_ip || '';
+                // Merge rules from both guid-match and source_ip-match
+                const rules = [
+                    ...(findByGuid[guid] || []),
+                    ...(findBySrcIp[srcIp] || []),
+                ];
                 let sev = 'benign';
                 rules.forEach(r => {
                     const s = (r.severity || '').toLowerCase();
@@ -62,17 +77,20 @@ const TimelineView = {
                 });
                 return {
                     ts,
-                    hostname:     e.hostname      || 'unknown',
-                    process_name: e.process_name  || '',          // empty for non-process events
-                    commandline:  e.commandline   || '',
-                    user_name:    e.user_name     || '',
-                    event_id:     e.event_id      || '',
+                    hostname:      e.hostname       || 'unknown',
+                    process_name:  e.process_name   || '',
+                    commandline:   e.commandline    || '',
+                    user_name:     e.user_name      || '',
+                    event_id:      e.event_id       || '',
+                    source_ip:     e.source_ip      || '',
+                    event_outcome: e.event_outcome  || '',
+                    action_type:   e.action_type    || '',
                     // AD Object fields (EID 4662 / DCSync)
-                    properties:   e.properties    || '',
-                    object_guid:  e.object_guid   || '',
-                    object_type:  e.object_type   || '',
-                    access_mask:  e.access_mask   || '',
-                    severity:     sev,
+                    properties:    e.properties     || '',
+                    object_guid:   e.object_guid    || '',
+                    object_type:   e.object_type    || '',
+                    access_mask:   e.access_mask    || '',
+                    severity:      sev,
                     rules,
                 };
             })
@@ -478,7 +496,7 @@ const TimelineView = {
                     <span class="detail-sev-badge ${sevCls}">${d.severity}</span>
                     <strong style="font-size:14px;">${this.esc(displayName)}</strong>
                 </div>
-                <button onclick="document.getElementById('timeline-detail').classList.add('hidden')"
+                <button id="tl-detail-close-btn"
                     style="background:none;border:none;color:#94a3b8;cursor:pointer;font-size:18px;line-height:1;">✕</button>
             </div>
             <div class="detail-field">
@@ -497,6 +515,14 @@ const TimelineView = {
             ${rulesHtml ? `<div class="detail-field"><div class="detail-field-label">Matched Rules</div>${rulesHtml}</div>` : ""}
             ${llmBtnHtml}
         `;
+
+        // Close button listener (CSP blocks inline onclick)
+        const closeBtn = document.getElementById("tl-detail-close-btn");
+        if (closeBtn) {
+            closeBtn.addEventListener("click", () => {
+                panel.classList.add("hidden");
+            });
+        }
 
         const llmBtn = document.getElementById("tl-detail-llm-btn");
         if (llmBtn && llmCtx) {

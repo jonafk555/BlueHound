@@ -1,6 +1,6 @@
-version: "1.0"
-name: "BlueHound Windows Threat Hunting Playbook"
-description: "Detection rules for Windows threat hunting, mapped to MITRE ATT&CK"
+version: "1.1"
+name: "BlueHound Threat Hunting Playbook"
+description: "Detection rules for Windows & Linux threat hunting, mapped to MITRE ATT&CK"
 
 rules:
   # ── Execution ──────────────────────────────────────────────
@@ -272,3 +272,10 @@ rules:
       commandline_regex: "(?i)(NtUnmapViewOfSection|WriteProcessMemory|VirtualAllocEx|CreateRemoteThread)"
     description: "API calls associated with process hollowing or injection."
     hunt_guidance: "High-confidence indicator of advanced attack. Full memory forensics recommended."
+
+  # ══════════════════════════════════════════════════════════════
+  # Linux / SSH Detection
+  # ══════════════════════════════════════════════════════════════
+  # SSH brute force detection is handled by correlation logic in
+  # threat_rules.py (_correlate_ssh_bruteforce), not per-event rules.
+  # It detects: enumeration → valid account targeting → compromise.

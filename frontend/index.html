@@ -7,7 +7,7 @@
     <title>BlueHound — Threat Hunting Workbench</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/css/main.css?v=1775353246">
+    <link rel="stylesheet" href="/css/main.css?v=1775360000">
     <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
 </head>
 <body>
@@ -57,7 +57,7 @@
         </div>
         <div class="nav-actions">
             <label class="upload-btn" id="upload-btn">
-                <input type="file" accept=".json,.csv,.xml,.log" id="file-input" hidden>
+                <input type="file" accept=".json,.csv,.xml,.log,.evtx" id="file-input" hidden>
                 <svg viewBox="0 0 20 20" width="16"><path d="M10 2 L10 14 M5 7 L10 2 L15 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M3 14 L3 17 L17 17 L17 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
                 Upload Logs
             </label>
@@ -110,7 +110,7 @@
                 </div>
                 <h1>BlueHound</h1>
                 <p class="landing-subtitle">Graph-Driven Windows Threat Hunting</p>
-                <p class="landing-desc">Upload Windows event logs (Sysmon, Security, PowerShell) or load the demo dataset to begin hunting.</p>
+                <p class="landing-desc">Upload Windows event logs, including native EVTX, Sysmon, Security, and PowerShell exports, or load the demo dataset to begin hunting.</p>
                 <div class="landing-actions">
                     <label class="btn-primary" for="file-input">
                         Upload Log File
@@ -305,12 +305,12 @@
     </div>
 
     <script src="https://d3js.org/d3.v7.min.js"></script>
-    <script src="/js/app.js?v=1775352926"></script>
-    <script src="/js/graph.js?v=1775352926"></script>
-    <script src="/js/process_tree.js?v=1775352926"></script>
-    <script src="/js/query_panel.js?v=1775352926"></script>
-    <script src="/js/hunt_panel.js?v=1775352926"></script>
-    <script src="/js/llm_panel.js?v=1775352926"></script>
-    <script src="/js/timeline.js?v=1775352926"></script>
+    <script src="/js/app.js?v=1775360000"></script>
+    <script src="/js/graph.js?v=1775360000"></script>
+    <script src="/js/process_tree.js?v=1775360000"></script>
+    <script src="/js/query_panel.js?v=1775360000"></script>
+    <script src="/js/hunt_panel.js?v=1775360000"></script>
+    <script src="/js/llm_panel.js?v=1775360000"></script>
+    <script src="/js/timeline.js?v=1775360000"></script>
 </body>
 </html>

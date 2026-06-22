@@ -22,7 +22,7 @@ fi
 
 source venv/bin/activate
 echo "📦 Installing dependencies..."
-pip install -q -r requirements.txt
+pip3 install -q -r requirements.txt
 
 # VULN-14: Run dependency vulnerability audit
 echo "🔍 Running dependency security audit..."

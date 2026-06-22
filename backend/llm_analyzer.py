@@ -1,5 +1,6 @@
-"""LLM-based analyzer — CommandLine analysis + session summarization."""
+"""LLM-based analyzer — pre-scan pipeline, command analysis, and summarization."""
 import os, json, re, logging
+from collections import Counter, defaultdict
 from urllib.parse import urlparse
 from dotenv import load_dotenv
 import httpx
@@ -8,8 +9,10 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-# VULN-17: Allowlist for OLLAMA_URL — only localhost/127.0.0.1 are permitted
-_ALLOWED_OLLAMA_HOSTS = {"localhost", "127.0.0.1", "::1"}
+# VULN-17: Allowlist for OLLAMA_URL — only localhost/127.0.0.1 + configured Docker service names
+_DEFAULT_OLLAMA_HOSTS = {"localhost", "127.0.0.1", "::1"}
+_EXTRA_HOSTS = set(filter(None, os.getenv("ALLOWED_OLLAMA_HOSTS", "ollama").split(",")))
+_ALLOWED_OLLAMA_HOSTS = _DEFAULT_OLLAMA_HOSTS | _EXTRA_HOSTS
 
 def _validate_ollama_url(url: str) -> str:
     """VULN-17: Validate OLLAMA_URL to prevent SSRF."""
@@ -102,6 +105,9 @@ SECURITY_EID_CONTEXT = {
     7045: "New service installed — common persistence technique.",
 }
 
+PRESCAN_EVENT_CAP = int(os.getenv("BLUEHOUND_LLM_PRESCAN_EVENTS", "5000"))
+PRESCAN_FINDING_CAP = int(os.getenv("BLUEHOUND_LLM_PRESCAN_FINDINGS", "100"))
+
 # ── Heuristic detection rules ─────────────────────────────────
 HEURISTIC_CHECKS = [
     # ── AMSI Bypass (obfuscation-resistant) ──────────────────
@@ -155,7 +161,7 @@ HEURISTIC_CHECKS = [
 
 
 class LLMAnalyzer:
-    """Analyze CommandLine strings and summarize sessions using LLM."""
+    """Analyze log sessions and CommandLine strings using bounded LLM-safe context."""
 
     def __init__(self):
         self.ollama_url   = _validate_ollama_url(os.getenv("OLLAMA_URL", "http://localhost:11434"))
@@ -167,6 +173,160 @@ class LLMAnalyzer:
     def _get_openai_key(self) -> str:
         """VULN-22: Always read API key from env at call time, never cache on instance."""
         return os.getenv("OPENAI_API_KEY", "")
+
+    # ════════════════════════════════════════════════════════════
+    # Public: bounded threat-hunting pre-scan
+    # ════════════════════════════════════════════════════════════
+    async def prescan_session(self, events: list) -> dict:
+        """Run the first-stage hunt pipeline before rules, graphing, or summaries.
+
+        This follows the Threat Hunter Playbook lifecycle shape: plan context,
+        execute bounded analytics, and report initial hypotheses for deeper hunt.
+        It deliberately avoids sending whole uploads to any model.
+        """
+        sample = events[:PRESCAN_EVENT_CAP]
+        semantic_hits = []
+        timeline = []
+        proc_edges = Counter()
+        host_counts = Counter()
+        user_counts = Counter()
+        event_counts = Counter()
+
+        for ev in sample:
+            cmd = self._event_activity_text(ev)
+            ctx = self._event_context(ev)
+            host_counts.update([ctx.get("hostname") or "unknown"])
+            user_counts.update([ctx.get("user_name") or "unknown"])
+            event_counts.update([str(ctx.get("event_id") or "unknown")])
+            if ev.get("timestamp"):
+                timeline.append({
+                    "timestamp": str(ev.get("timestamp", ""))[:64],
+                    "process_name": str(ev.get("process_name", ""))[:160],
+                    "hostname": str(ev.get("hostname", ""))[:160],
+                    "event_id": ev.get("event_id", ""),
+                })
+            parent = ev.get("parent_process_name")
+            child = ev.get("process_name")
+            if parent and child:
+                proc_edges.update([(str(parent).lower(), str(child).lower())])
+
+            dcsync_hit = self._check_dcsync_guid(cmd, ctx)
+            analysis = dcsync_hit or self._heuristic_analysis(cmd, ctx)
+            if analysis.get("is_malicious") or analysis.get("severity", 0) >= 5:
+                semantic_hits.append({
+                    "timestamp": ev.get("timestamp", ""),
+                    "hostname": ev.get("hostname", ""),
+                    "user_name": ev.get("user_name", ""),
+                    "process_name": ev.get("process_name", ""),
+                    "event_id": ev.get("event_id", ""),
+                    "severity": analysis.get("severity", 1),
+                    "mitre_techniques": analysis.get("mitre_techniques", []),
+                    "indicators": analysis.get("indicators", [])[:8],
+                    "activity": cmd[:500],
+                })
+
+        semantic_hits.sort(key=lambda x: x.get("severity", 0), reverse=True)
+        timeline.sort(key=lambda x: x.get("timestamp", ""))
+        initial_findings = semantic_hits[:PRESCAN_FINDING_CAP]
+        phases = self._infer_attack_phases(initial_findings)
+
+        return {
+            "source": "llm_pipeline_heuristic",
+            "framework": "Threat Hunter Playbook: Plan -> Execute -> Report",
+            "scope": {
+                "events_received": len(events),
+                "events_prescanned": len(sample),
+                "prescan_cap": PRESCAN_EVENT_CAP,
+                "truncated": len(events) > len(sample),
+            },
+            "plan": {
+                "hypothesis": "Hunt for malicious intent across command semantics, chronology, process relationships, and abnormal behavior.",
+                "data_sources": sorted(k for k, v in event_counts.items() if v)[:20],
+                "analytic_focus": [
+                    "semantic indicators in command lines and messages",
+                    "time-ordered activity concentration",
+                    "parent-child process anomalies",
+                    "credential access, defense evasion, lateral movement, and persistence",
+                ],
+            },
+            "execute": {
+                "initial_findings": initial_findings,
+                "top_event_ids": event_counts.most_common(12),
+                "top_hosts": host_counts.most_common(12),
+                "top_users": user_counts.most_common(12),
+                "top_process_edges": [
+                    {"parent": p, "child": c, "count": n}
+                    for (p, c), n in proc_edges.most_common(20)
+                ],
+                "timeline_preview": timeline[:200],
+                "attack_phases": phases,
+            },
+            "report": {
+                "overall_severity": self._prescan_severity(initial_findings),
+                "next_steps": self._prescan_next_steps(initial_findings, phases),
+            },
+        }
+
+    def _event_activity_text(self, ev: dict) -> str:
+        parts = [
+            ev.get("commandline"),
+            ev.get("message"),
+            ev.get("process_name"),
+            ev.get("process_path"),
+            ev.get("target_object"),
+            ev.get("properties"),
+        ]
+        return " | ".join(str(p) for p in parts if p)
+
+    def _event_context(self, ev: dict) -> dict:
+        return {
+            "event_id": ev.get("event_id"),
+            "process_name": ev.get("process_name"),
+            "hostname": ev.get("hostname"),
+            "user_name": ev.get("user_name"),
+            "properties": ev.get("properties"),
+            "object_guid": ev.get("object_guid"),
+        }
+
+    def _infer_attack_phases(self, findings: list) -> list:
+        phase_by_tech = {
+            "T1059": "Execution", "T1059.001": "Execution",
+            "T1027": "Defense Evasion", "T1562.001": "Defense Evasion", "T1562.006": "Defense Evasion",
+            "T1003.001": "Credential Access", "T1003.006": "Credential Access",
+            "T1110.001": "Credential Access", "T1047": "Execution",
+            "T1021.002": "Lateral Movement", "T1021.006": "Lateral Movement",
+            "T1053.005": "Persistence", "T1547.001": "Persistence", "T1543.003": "Persistence",
+            "T1218.005": "Defense Evasion", "T1218.010": "Defense Evasion", "T1218.011": "Defense Evasion",
+        }
+        phases = []
+        for f in findings:
+            for tech in f.get("mitre_techniques", []):
+                phase = phase_by_tech.get(tech) or phase_by_tech.get(str(tech).split(".")[0])
+                if phase and phase not in phases:
+                    phases.append(phase)
+        return phases or ["No high-confidence phase inferred"]
+
+    def _prescan_severity(self, findings: list) -> str:
+        max_sev = max((int(f.get("severity", 1)) for f in findings), default=1)
+        if max_sev >= 9:
+            return "critical"
+        if max_sev >= 7:
+            return "high"
+        if max_sev >= 5:
+            return "medium"
+        return "clean"
+
+    def _prescan_next_steps(self, findings: list, phases: list) -> list:
+        if not findings:
+            return ["Continue rule evaluation and review timeline/process graph for environment-specific anomalies."]
+        steps = ["Prioritize initial findings with severity 7 or higher before broad triage."]
+        if "Credential Access" in phases:
+            steps.append("Validate affected identities, rotate credentials where compromise is plausible, and hunt for reuse.")
+        if "Defense Evasion" in phases:
+            steps.append("Collect process memory, script block logs, and EDR telemetry for evasion artifacts.")
+        if "Lateral Movement" in phases:
+            steps.append("Correlate source/destination hosts and remote execution events in chronological order.")
+        return steps
 
     # ════════════════════════════════════════════════════════════
     # Public: analyze single event

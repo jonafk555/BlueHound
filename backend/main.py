@@ -29,10 +29,13 @@ logging.basicConfig(
 logger = logging.getLogger("bluehound")
 
 # ── Constants ─────────────────────────────────────────────────
-MAX_FILE_BYTES          = 50 * 1024 * 1024   # 50 MB upload limit
+MAX_FILE_BYTES          = 200 * 1024 * 1024  # 200 MB upload limit
+STREAM_CHUNK_SIZE       = 2 * 1024 * 1024    # 2 MB chunks for streaming upload to disk
 MAX_EVENTS_SUMMARY      = 5_000              # /api/llm/summarize events cap
 MAX_CMDLINE_LEN         = 32_768             # /api/llm/analyze commandline cap
-ALLOWED_EXTENSIONS      = {".json", ".csv", ".xml", ".log"}
+MAX_RESPONSE_EVENTS     = int(os.getenv("BLUEHOUND_MAX_RESPONSE_EVENTS", "50000"))
+MAX_PARSED_EVENTS       = int(os.getenv("BLUEHOUND_MAX_PARSED_EVENTS", "150000"))
+ALLOWED_EXTENSIONS      = {".json", ".csv", ".xml", ".log", ".evtx"}
 MITRE_ID_RE             = re.compile(r"^T\d{4}(\.\d{3})?$")
 # VULN-24: safe filename sanitizer (strip newlines/control chars)
 _SAFE_FILENAME_RE       = re.compile(r"[^\w.\-_ ]")
@@ -166,16 +169,36 @@ def _strip_raw(events: list) -> list:
     return [{k: v for k, v in ev.items() if k != "_raw"} for ev in events]
 
 
+async def _run_analysis_pipeline(events: list) -> dict:
+    """Central pipeline: LLM pre-scan first, then rules, graph, and facets."""
+    prescan = await llm_analyzer.prescan_session(events)
+    findings = rule_engine.evaluate_all(events)
+    graph_data = graph_engine.build_graph(events, findings)
+    facets = ingester.extract_facets(events)
+    response_events = _strip_raw(events[:MAX_RESPONSE_EVENTS])
+    return {
+        "event_count": len(events),
+        "events_truncated": len(events) > len(response_events),
+        "returned_event_count": len(response_events),
+        "finding_count": len(findings),
+        "llm_prescan": prescan,
+        "graph": graph_data,
+        "events": response_events,
+        "findings": findings,
+        "facets": facets,
+    }
+
+
 # ── API Endpoints ─────────────────────────────────────────────
 
 @app.post("/api/upload")
-@limiter.limit("20/minute")
+@limiter.limit("10/minute")
 async def upload_log(
     request: Request,
     file: UploadFile = File(...),
     _auth: Any = Depends(_check_api_key),
 ):
-    """Upload and ingest a log file (JSON/CSV/XML/LOG). Max 50 MB."""
+    """Upload and ingest a log file (JSON/CSV/XML/LOG/EVTX). Max 200 MB."""
     t0 = time.monotonic()
 
     # Validate extension
@@ -183,34 +206,47 @@ async def upload_log(
     if suffix not in ALLOWED_EXTENSIONS:
         raise HTTPException(400, f"Unsupported format. Allowed: {sorted(ALLOWED_EXTENSIONS)}")
 
-    # VULN-03: enforce file size limit
-    content = await file.read(MAX_FILE_BYTES + 1)
-    if len(content) > MAX_FILE_BYTES:
-        raise HTTPException(413, f"File exceeds maximum size of {MAX_FILE_BYTES // 1024 // 1024} MB")
-
     # VULN-24: sanitize filename before logging
     safe_name = _sanitize_filename(file.filename or "")
 
+    # VULN-03: stream upload to disk in chunks to avoid holding 200 MB in memory
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+    total_bytes = 0
     try:
-        tmp.write(content)
+        while True:
+            chunk = await file.read(STREAM_CHUNK_SIZE)
+            if not chunk:
+                break
+            total_bytes += len(chunk)
+            if total_bytes > MAX_FILE_BYTES:
+                tmp.close()
+                os.unlink(tmp.name)
+                raise HTTPException(413, f"File exceeds maximum size of {MAX_FILE_BYTES // 1024 // 1024} MB")
+            tmp.write(chunk)
         tmp.close()
-        events   = ingester.parse_file(tmp.name, suffix)
-        findings = rule_engine.evaluate_all(events)
-        graph_data = graph_engine.build_graph(events, findings)
-        facets   = ingester.extract_facets(events)
+
+        try:
+            events = ingester.parse_file(tmp.name, suffix, max_events=MAX_PARSED_EVENTS)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        except RuntimeError as exc:
+            logger.error("Parser runtime error for suffix=%s: %r", suffix, exc)
+            raise HTTPException(500, "Parser dependency is unavailable") from exc
+        analysis = await _run_analysis_pipeline(events)
         logger.info(
-            "upload | file=%r suffix=%s events=%d findings=%d elapsed=%.2fs client=%s",
-            safe_name, suffix, len(events), len(findings),
+            "upload | file=%r suffix=%s size=%.1fMB events=%d findings=%d elapsed=%.2fs client=%s",
+            safe_name, suffix, total_bytes / 1024 / 1024, analysis["event_count"], analysis["finding_count"],
             time.monotonic() - t0, request.client.host,
         )
         return {
-            "status": "ok", "event_count": len(events), "finding_count": len(findings),
-            "graph": graph_data, "events": _strip_raw(events),
-            "findings": findings, "facets": facets,
+            "status": "ok",
+            **analysis,
         }
     finally:
-        os.unlink(tmp.name)
+        try:
+            os.unlink(tmp.name)
+        except FileNotFoundError:
+            pass  # already cleaned up on size exceeded
 
 
 @app.get("/api/sample")
@@ -227,17 +263,13 @@ async def load_sample(
         "chaos":      SAMPLE_DIR / "chaos_realworld.json",
     }
     sample_path = files.get(dataset, files["enterprise"])
-    events   = ingester.parse_file(str(sample_path), ".json")
-    findings = rule_engine.evaluate_all(events)
-    graph_data = graph_engine.build_graph(events, findings)
-    facets = ingester.extract_facets(events)
+    events = ingester.parse_file(str(sample_path), ".json", max_events=MAX_PARSED_EVENTS)
+    analysis = await _run_analysis_pipeline(events)
     logger.info("sample | dataset=%s events=%d findings=%d client=%s",
-                dataset, len(events), len(findings), request.client.host)
+                dataset, analysis["event_count"], analysis["finding_count"], request.client.host)
     return {
         "status": "ok", "dataset": dataset,
-        "event_count": len(events), "finding_count": len(findings),
-        "graph": graph_data, "events": _strip_raw(events),
-        "findings": findings, "facets": facets,
+        **analysis,
     }
 
 

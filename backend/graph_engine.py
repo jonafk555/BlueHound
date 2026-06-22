@@ -43,7 +43,11 @@ class GraphEngine:
                         sev = "low"
 
             node_type = "process"
-            if ev.get("destination_ip") and ev.get("event_id") in (3, "3"):
+            is_network_event = (
+                ev.get("event_id") in (3, "3", 5156, "5156")
+                or ev.get("event_category") in ("network_connection",)
+            )
+            if ev.get("destination_ip") and is_network_event:
                 node_type = "network"
 
             if pguid not in nodes_map:
@@ -100,7 +104,7 @@ class GraphEngine:
 
             # Network edge: process → destination
             dst_ip = ev.get("destination_ip")
-            if dst_ip and ev.get("event_id") in (3, "3"):
+            if dst_ip and is_network_event:
                 net_id = f"net-{dst_ip}:{ev.get('destination_port', '')}"
                 if net_id not in nodes_map:
                     nodes_map[net_id] = {

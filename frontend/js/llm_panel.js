@@ -13,12 +13,15 @@ function _llmSafeMitreUrl(id) {
 const LLMPanel = {
     events:   [],
     findings: [],
+    prescan: null,
 
-    init(events, findings) {
+    init(events, findings, prescan) {
         this.events   = events   || [];
         this.findings = findings || [];
+        this.prescan  = prescan  || null;
         this.bindEvents();
         this.loadQuickPicks();
+        this.renderPrescan();
         // Auto-generate summary when data loaded
         this.generateSummary();
     },
@@ -93,7 +96,10 @@ const LLMPanel = {
 
     // ── Session Summary ─────────────────────────────────────
     async generateSummary() {
-        if (!this.findings || this.findings.length === 0) return;
+        if (!this.findings || this.findings.length === 0) {
+            this.renderPrescan();
+            return;
+        }
         const summaryDiv = document.getElementById('llm-summary-result');
         summaryDiv.innerHTML = '<p style="color:var(--text-secondary);font-size:13px;">⏳ Generating threat summary…</p>';
         try {
@@ -107,6 +113,55 @@ const LLMPanel = {
         } catch (err) {
             summaryDiv.innerHTML = `<p style="color:var(--critical);">Error: ${err.message}</p>`;
         }
+    },
+
+    renderPrescan() {
+        const div = document.getElementById('llm-summary-result');
+        if (!div || !this.prescan) return;
+        const report = this.prescan.report || {};
+        const exec = this.prescan.execute || {};
+        const scope = this.prescan.scope || {};
+        const sev = (report.overall_severity || 'clean').toLowerCase();
+        const sevColor = { critical:'#ef4444', high:'#f97316', medium:'#eab308', low:'#3b82f6', clean:'#22c55e' }[sev] || '#94a3b8';
+        const hits = (exec.initial_findings || []).slice(0, 5);
+        const phases = (exec.attack_phases || []).slice(0, 6);
+        const nextSteps = (report.next_steps || []).slice(0, 5);
+        const hitHtml = hits.length
+            ? '<ul class="summary-findings-list">' + hits.map(h => {
+                const indicators = (h.indicators || []).slice(0, 3).join(', ');
+                return `<li>${this.esc(h.timestamp || '')} ${this.esc(h.hostname || '')} ${this.esc(h.process_name || '')}: ${this.esc(indicators || h.activity || '')}</li>`;
+            }).join('') + '</ul>'
+            : '<p style="color:var(--text-muted);font-size:12px;">No high-confidence malicious semantic indicators in the bounded pre-scan.</p>';
+        const phaseHtml = phases.map(p => `<span class="summary-tag">${this.esc(p)}</span>`).join('');
+        const stepHtml = nextSteps.map((s, i) =>
+            `<div class="summary-action"><span class="action-num">${i + 1}</span>${this.esc(s)}</div>`
+        ).join('');
+
+        div.innerHTML = `
+            <div class="summary-card">
+                <div class="summary-top">
+                    <div class="summary-sev-badge" style="background:${sevColor}20;border:1px solid ${sevColor};color:${sevColor};">
+                        ${this.esc(sev.toUpperCase())}
+                    </div>
+                    <div>
+                        <div style="font-size:15px;font-weight:700;">Initial LLM Hunt Pipeline</div>
+                        <div style="font-size:11px;color:var(--text-muted);">
+                            ${this.esc(this.prescan.framework || '')} &middot;
+                            ${this.esc(scope.events_prescanned || 0)} / ${this.esc(scope.events_received || 0)} events
+                            ${scope.truncated ? '&middot; bounded sample' : ''}
+                        </div>
+                    </div>
+                </div>
+                <div class="summary-narrative">
+                    <div class="summary-section-label">Attack Phases</div>
+                    <div>${phaseHtml}</div>
+                </div>
+                <div class="summary-findings">
+                    <div class="summary-section-label">Pre-scan Findings</div>
+                    ${hitHtml}
+                </div>
+                ${stepHtml ? `<div class="summary-actions"><div class="summary-section-label">Next Steps</div>${stepHtml}</div>` : ''}
+            </div>`;
     },
 
     renderSummary(data) {
