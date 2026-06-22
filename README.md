@@ -1,5 +1,3 @@
-<![CDATA[<div align="center">
-
 # 🔵 BlueHound
 
 ### Graph-Driven Threat Hunting Workbench
