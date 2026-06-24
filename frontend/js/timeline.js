@@ -374,7 +374,7 @@ const TimelineView = {
         const sevBadge = isBad
             ? `<span class="tl-tip-sev tl-tip-${d.severity}">${d.severity.toUpperCase()}</span>` : '';
         const rulesHtml = d.rules.length
-            ? `<div class="tl-tip-rules">${d.rules.map(r => `<div>⚠ ${r.rule_name}</div>`).join('')}</div>` : '';
+            ? `<div class="tl-tip-rules">${d.rules.map(r => `<div>⚠ ${this.esc(r.rule_name)}</div>`).join('')}</div>` : '';
 
         // EID 4662: show AD fields, not CommandLine
         const isADEvent = String(d.event_id) === '4662';
@@ -418,12 +418,13 @@ const TimelineView = {
         const isADEvent = String(d.event_id) === "4662";
         const displayName = d.process_name || (isADEvent ? "AD Object Access (DCSync)" : "unknown");
 
-        const rulesHtml = d.rules.map(r =>
-            `<div class="detail-rule">
+        const rulesHtml = d.rules.map(r => {
+            const ruleSev = (r.severity || '').toLowerCase();
+            return `<div class="detail-rule">
                 <div class="detail-rule-name">${this.esc(r.rule_name)}</div>
-                <span class="finding-sev ${r.severity}">${r.severity}</span>
-            </div>`
-        ).join("");
+                <span class="finding-sev ${ruleSev}">${ruleSev.toUpperCase()}</span>
+            </div>`;
+        }).join("");
 
         let activityHtml = "", llmBtnHtml = "", llmCtx = null;
 
@@ -465,7 +466,7 @@ const TimelineView = {
                 matched_rules: d.rules.map(r => ({ name: r.rule_name, severity: r.severity })),
                 properties: d.properties };
         } else {
-            const ips  = (d.commandline.match(/\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(?::\d+)?/g) || []);
+            const ips  = (d.commandline.match(/\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(?::\d+)?\b/g) || []);
             const urls = (d.commandline.match(/https?:\/\/[^\s'"\)\]]+/g) || []);
             const iocs = [...new Set([...ips, ...urls])];
             const iocHtml = iocs.length
@@ -509,7 +510,7 @@ const TimelineView = {
             </div>
             <div class="detail-field">
                 <div class="detail-field-label">Event ID</div>
-                <div class="detail-field-value">${d.event_id}</div>
+                <div class="detail-field-value">${this.esc(d.event_id)}</div>
             </div>
             ${activityHtml}
             ${rulesHtml ? `<div class="detail-field"><div class="detail-field-label">Matched Rules</div>${rulesHtml}</div>` : ""}

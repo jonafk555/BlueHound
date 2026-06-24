@@ -1,13 +1,14 @@
 """BlueHound — Threat Hunting Platform API Server"""
-import os, json, tempfile, shutil, logging, re, time
+import base64, binascii, gc, logging, os, re, secrets, tempfile, time
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import FastAPI, UploadFile, File, HTTPException, Query, Request, Depends
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.exception_handlers import http_exception_handler
+from pydantic import BaseModel, ConfigDict, Field
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -31,10 +32,13 @@ logger = logging.getLogger("bluehound")
 # ── Constants ─────────────────────────────────────────────────
 MAX_FILE_BYTES          = 200 * 1024 * 1024  # 200 MB upload limit
 STREAM_CHUNK_SIZE       = 2 * 1024 * 1024    # 2 MB chunks for streaming upload to disk
-MAX_EVENTS_SUMMARY      = 5_000              # /api/llm/summarize events cap
+MAX_EVENTS_SUMMARY      = 2_000              # /api/llm/summarize events cap
 MAX_CMDLINE_LEN         = 32_768             # /api/llm/analyze commandline cap
-MAX_RESPONSE_EVENTS     = int(os.getenv("BLUEHOUND_MAX_RESPONSE_EVENTS", "50000"))
-MAX_PARSED_EVENTS       = int(os.getenv("BLUEHOUND_MAX_PARSED_EVENTS", "150000"))
+MAX_JSON_BODY_BYTES     = int(os.getenv("BLUEHOUND_MAX_JSON_BODY_BYTES", str(2 * 1024 * 1024)))
+MAX_SUMMARY_FIELD_LEN   = 4_096
+MAX_QUERY_FIELD_LEN     = 4_096
+MAX_RESPONSE_EVENTS     = int(os.getenv("BLUEHOUND_MAX_RESPONSE_EVENTS", "10000"))
+MAX_PARSED_EVENTS       = int(os.getenv("BLUEHOUND_MAX_PARSED_EVENTS", "50000"))
 ALLOWED_EXTENSIONS      = {".json", ".csv", ".xml", ".log", ".evtx"}
 MITRE_ID_RE             = re.compile(r"^T\d{4}(\.\d{3})?$")
 # VULN-24: safe filename sanitizer (strip newlines/control chars)
@@ -45,8 +49,18 @@ ALLOWED_ORIGINS = os.getenv(
     "ALLOWED_ORIGINS", "http://localhost:8443,http://127.0.0.1:8443"
 ).split(",")
 
-# VULN-01: API key authentication
+# Authentication: production must fail closed if no key is configured.
 API_KEY = os.getenv("BLUEHOUND_API_KEY", "")
+APP_ENV = os.getenv("BLUEHOUND_ENV", "development").strip().lower()
+CONFIGURED_HOST = os.getenv("BLUEHOUND_HOST", "127.0.0.1").strip()
+ALLOW_UNAUTHENTICATED = os.getenv("ALLOW_UNAUTHENTICATED", "false").lower() == "true"
+if APP_ENV in {"production", "prod"} and not API_KEY:
+    raise RuntimeError("BLUEHOUND_API_KEY is required when BLUEHOUND_ENV=production")
+if not API_KEY and CONFIGURED_HOST not in {"127.0.0.1", "localhost", "::1"} and not ALLOW_UNAUTHENTICATED:
+    raise RuntimeError(
+        "Refusing unauthenticated non-loopback bind. Set BLUEHOUND_API_KEY or explicitly set "
+        "ALLOW_UNAUTHENTICATED=true for an isolated development environment."
+    )
 
 # VULN-23: allowed event_context field names (allowlist)
 ALLOWED_CTX_FIELDS = frozenset({
@@ -70,14 +84,34 @@ def _sanitize_filename(name: str) -> str:
     return name or "unnamed"
 
 
-def _check_api_key(request: Request) -> None:
-    """Require X-API-Key header if BLUEHOUND_API_KEY is set in .env."""
-    if not API_KEY:
-        return  # dev mode: no key configured → open (local-only)
+def _request_api_key(request: Request) -> str:
+    """Read an API key from X-API-Key or HTTP Basic password."""
     key = request.headers.get("X-API-Key", "")
-    if key != API_KEY:
+    if key:
+        return key
+    auth = request.headers.get("Authorization", "")
+    if not auth.startswith("Basic "):
+        return ""
+    try:
+        decoded = base64.b64decode(auth[6:], validate=True).decode("utf-8")
+        _, password = decoded.split(":", 1)
+        return password
+    except (binascii.Error, UnicodeDecodeError, ValueError):
+        return ""
+
+
+def _check_api_key(request: Request) -> None:
+    """Require authentication when BLUEHOUND_API_KEY is configured."""
+    if not API_KEY:
+        return
+    key = _request_api_key(request)
+    if not key or not secrets.compare_digest(key, API_KEY):
         logger.warning("Rejected request from %s — invalid API key", request.client.host)
-        raise HTTPException(status_code=401, detail="Invalid or missing X-API-Key")
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication required",
+            headers={"WWW-Authenticate": 'Basic realm="BlueHound", charset="UTF-8"'},
+        )
 
 
 def _allowlist_ctx(ctx: dict) -> dict:
@@ -85,6 +119,19 @@ def _allowlist_ctx(ctx: dict) -> dict:
     if not isinstance(ctx, dict):
         return {}
     sanitized = {k: v for k, v in ctx.items() if k in ALLOWED_CTX_FIELDS}
+    field_limits = {
+        "event_id": 32,
+        "EventID": 32,
+        "process_name": 200,
+        "hostname": 200,
+        "user_name": 200,
+        "properties": 8192,
+        "Properties": 8192,
+        "object_guid": 200,
+    }
+    for key, limit in field_limits.items():
+        if key in sanitized and sanitized[key] is not None:
+            sanitized[key] = str(sanitized[key])[:limit]
     # Validate matched_rules structure
     if "matched_rules" in sanitized:
         rules = sanitized["matched_rules"]
@@ -99,7 +146,79 @@ def _allowlist_ctx(ctx: dict) -> dict:
     return sanitized
 
 
+def _bounded_value(value: Any, depth: int = 0) -> Any:
+    """Bound untrusted summary records before prompt construction or response generation."""
+    if depth >= 4:
+        return str(value)[:MAX_SUMMARY_FIELD_LEN]
+    if isinstance(value, str):
+        return value[:MAX_SUMMARY_FIELD_LEN]
+    if isinstance(value, dict):
+        return {
+            str(k)[:128]: _bounded_value(v, depth + 1)
+            for k, v in list(value.items())[:100]
+        }
+    if isinstance(value, list):
+        return [_bounded_value(v, depth + 1) for v in value[:100]]
+    if value is None or isinstance(value, (bool, int, float)):
+        return value
+    return str(value)[:MAX_SUMMARY_FIELD_LEN]
+
+
+class QueryFilters(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_ip: str | None = Field(default=None, max_length=MAX_QUERY_FIELD_LEN)
+    destination_ip: str | None = Field(default=None, max_length=MAX_QUERY_FIELD_LEN)
+    process_name: str | list[str] | None = None
+    hostname: str | None = Field(default=None, max_length=MAX_QUERY_FIELD_LEN)
+    user_name: str | None = Field(default=None, max_length=MAX_QUERY_FIELD_LEN)
+    event_id: int | str | None = None
+    commandline_contains: str | None = Field(default=None, max_length=MAX_QUERY_FIELD_LEN)
+    commandline_regex: str | None = Field(default=None, max_length=MAX_QUERY_FIELD_LEN)
+    time_range: str | None = Field(default=None, max_length=16)
+    table: str | None = Field(default=None, max_length=64)
+    index: str | None = Field(default=None, max_length=64)
+
+
+class QueryRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    format: Literal["kql", "spl", "sigma"] = "kql"
+    filters: QueryFilters = Field(default_factory=QueryFilters)
+
+
+class AnalyzeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    commandline: str = Field(min_length=1, max_length=MAX_CMDLINE_LEN)
+    event_context: dict[str, Any] = Field(default_factory=dict)
+
+
+class SummaryRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    events: list[dict[str, Any]] = Field(default_factory=list, max_length=MAX_EVENTS_SUMMARY)
+    findings: list[dict[str, Any]] = Field(default_factory=list, max_length=1000)
+
+
 # ── Security Headers Middleware ───────────────────────────────
+class JSONBodyLimitMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        content_type = request.headers.get("content-type", "").lower()
+        if request.url.path.startswith("/api/") and "application/json" in content_type:
+            content_length = request.headers.get("content-length")
+            if content_length:
+                try:
+                    if int(content_length) > MAX_JSON_BODY_BYTES:
+                        return JSONResponse(status_code=413, content={"error": "JSON request body too large"})
+                except ValueError:
+                    return JSONResponse(status_code=400, content={"error": "Invalid Content-Length"})
+            body = await request.body()
+            if len(body) > MAX_JSON_BODY_BYTES:
+                return JSONResponse(status_code=413, content={"error": "JSON request body too large"})
+        return await call_next(request)
+
+
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
@@ -111,11 +230,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         # For now, allow inline styles only for this local-tool context with a clear comment
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
-            "script-src 'self' https://d3js.org https://cdn.jsdelivr.net; "
-            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "  # TODO: replace with nonce
-            "font-src 'self' https://fonts.gstatic.com; "
-            "img-src 'self' data: https:; "
-            "connect-src 'self' https://d3js.org; "
+            "script-src 'self'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "font-src 'self'; "
+            "img-src 'self' data:; "
+            "connect-src 'self'; "
             "object-src 'none'; "
             "base-uri 'self'; "
             "form-action 'self';"
@@ -140,7 +259,24 @@ async def custom_http_exception_handler(request: Request, exc: StarletteHTTPExce
     # Suppress detail for 5xx, pass through 4xx detail (user-facing)
     if exc.status_code >= 500:
         return JSONResponse(status_code=exc.status_code, content={"error": "Server error"})
-    return JSONResponse(status_code=exc.status_code, content={"error": exc.detail})
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"error": exc.detail},
+        headers=exc.headers,
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def request_validation_exception_handler(request: Request, exc: RequestValidationError):
+    errors = [
+        {
+            "location": ".".join(str(part) for part in error.get("loc", [])),
+            "message": error.get("msg", "Invalid value"),
+            "type": error.get("type", "validation_error"),
+        }
+        for error in exc.errors()[:20]
+    ]
+    return JSONResponse(status_code=422, content={"error": "Invalid request", "fields": errors})
 
 # VULN-04: restricted CORS
 app.add_middleware(
@@ -150,6 +286,7 @@ app.add_middleware(
     allow_headers=["Content-Type", "X-API-Key"],
     allow_credentials=False,
 )
+app.add_middleware(JSONBodyLimitMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 
 # Global singletons
@@ -170,15 +307,26 @@ def _strip_raw(events: list) -> list:
 
 
 async def _run_analysis_pipeline(events: list) -> dict:
-    """Central pipeline: LLM pre-scan first, then rules, graph, and facets."""
-    prescan = await llm_analyzer.prescan_session(events)
+    """Central pipeline: LLM pre-scan first, then rules, graph, and facets.
+    Optimized for memory: releases large objects as soon as they are no longer needed.
+    """
+    event_count = len(events)
+    prescan = await llm_analyzer.prescan_session(events[:200])  # prescan only needs a sample
     findings = rule_engine.evaluate_all(events)
     graph_data = graph_engine.build_graph(events, findings)
     facets = ingester.extract_facets(events)
+
+    # Build response events (truncated) and strip _raw
     response_events = _strip_raw(events[:MAX_RESPONSE_EVENTS])
+    events_truncated = event_count > len(response_events)
+
+    # Release the full events list to free memory before JSON serialization
+    del events
+    gc.collect()
+
     return {
-        "event_count": len(events),
-        "events_truncated": len(events) > len(response_events),
+        "event_count": event_count,
+        "events_truncated": events_truncated,
         "returned_event_count": len(response_events),
         "finding_count": len(findings),
         "llm_prescan": prescan,
@@ -277,34 +425,28 @@ async def load_sample(
 @limiter.limit("60/minute")
 async def build_query(
     request: Request,
-    payload: dict,
+    payload: QueryRequest,
     _auth: Any = Depends(_check_api_key),
 ):
     """Generate KQL/SPL/Sigma from structured filter."""
-    fmt     = payload.get("format", "kql")
-    filters = payload.get("filters", {})
-    if fmt not in ("kql", "spl", "sigma"):
-        raise HTTPException(400, "format must be one of: kql, spl, sigma")
-    if not isinstance(filters, dict):
-        raise HTTPException(400, "filters must be a JSON object")
-    return {"query": query_builder.generate(filters, fmt)}
+    filters = payload.filters.model_dump(exclude_none=True)
+    if isinstance(filters.get("process_name"), list):
+        names = filters["process_name"]
+        if len(names) > 50 or any(not isinstance(n, str) or len(n) > MAX_QUERY_FIELD_LEN for n in names):
+            raise HTTPException(422, "process_name list exceeds allowed limits")
+    return {"query": query_builder.generate(filters, payload.format)}
 
 
 @app.post("/api/llm/analyze")
 @limiter.limit("10/minute")   # VULN-20: strict LLM rate limit
 async def analyze_cmdline(
     request: Request,
-    payload: dict,
+    payload: AnalyzeRequest,
     _auth: Any = Depends(_check_api_key),
 ):
     """Analyze a CommandLine + event context for malicious intent."""
-    cmdline = payload.get("commandline", "")
-    if not cmdline or not isinstance(cmdline, str):
-        raise HTTPException(400, "commandline is required and must be a string")
-    # VULN-03: cap input length
-    if len(cmdline) > MAX_CMDLINE_LEN:
-        raise HTTPException(413, f"commandline exceeds {MAX_CMDLINE_LEN} character limit")
-    ctx = payload.get("event_context", {})
+    cmdline = payload.commandline
+    ctx = payload.event_context
     # VULN-23: allowlist context fields to prevent context poisoning
     ctx = _allowlist_ctx(ctx)
     logger.info("llm/analyze | len=%d client=%s", len(cmdline), request.client.host)
@@ -316,18 +458,12 @@ async def analyze_cmdline(
 @limiter.limit("5/minute")   # VULN-20: very strict — expensive operation
 async def summarize_session(
     request: Request,
-    payload: dict,
+    payload: SummaryRequest,
     _auth: Any = Depends(_check_api_key),
 ):
     """Summarize log session findings."""
-    events   = payload.get("events",   [])
-    findings = payload.get("findings", [])
-    if not isinstance(events, list) or not isinstance(findings, list):
-        raise HTTPException(400, "events and findings must be arrays")
-    if len(events) > MAX_EVENTS_SUMMARY:
-        events = events[:MAX_EVENTS_SUMMARY]
-    if len(findings) > 1000:
-        findings = findings[:1000]
+    events = [_bounded_value(ev) for ev in payload.events]
+    findings = [_bounded_value(f) for f in payload.findings]
     logger.info("llm/summarize | events=%d findings=%d client=%s",
                 len(events), len(findings), request.client.host)
     result = await llm_analyzer.summarize_session(events, findings)
@@ -360,8 +496,13 @@ app.mount("/js",     StaticFiles(directory=str(FRONTEND / "js")),     name="js")
 app.mount("/assets", StaticFiles(directory=str(FRONTEND / "assets")), name="assets")
 
 
+@app.get("/healthz")
+async def healthz():
+    return {"status": "ok"}
+
+
 @app.get("/")
-async def root():
+async def root(_auth: Any = Depends(_check_api_key)):
     return FileResponse(str(FRONTEND / "index.html"))
 
 

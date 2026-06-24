@@ -22,7 +22,6 @@ def _safe_search(pattern: str, text: str) -> bool:
     except re.error as exc:
         logger.error("Invalid regex pattern %r: %s", pattern[:60], exc)
         return False
-    return result[0]
 
 class ThreatRuleEngine:
     """Loads hunting playbook YAML and evaluates events against rules."""

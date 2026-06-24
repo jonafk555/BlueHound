@@ -5,9 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="BlueHound — Graph-driven Windows threat hunting workbench inspired by BloodHound">
     <title>BlueHound — Threat Hunting Workbench</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/css/main.css?v=1775360000">
+    <link rel="stylesheet" href="/css/main.css?v=1775409001">
     <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
 </head>
 <body>
@@ -132,6 +130,36 @@
 
         <!-- Graph Panel -->
         <div id="panel-graph" class="panel">
+            <div class="graph-filter-bar" id="graph-filter-bar">
+                <div class="gf-group">
+                    <label>Severity</label>
+                    <select id="gf-sev">
+                        <option value="">All</option>
+                        <option value="critical">Critical</option>
+                        <option value="high">High</option>
+                        <option value="medium">Medium</option>
+                        <option value="low">Low</option>
+                        <option value="benign">Benign</option>
+                    </select>
+                </div>
+                <div class="gf-group">
+                    <label>Process</label>
+                    <select id="gf-proc"><option value="">All Processes</option></select>
+                </div>
+                <div class="gf-group">
+                    <label>Host</label>
+                    <select id="gf-host"><option value="">All Hosts</option></select>
+                </div>
+                <div class="gf-group">
+                    <label>Event ID</label>
+                    <select id="gf-eid"><option value="">All</option></select>
+                </div>
+                <div class="gf-group gf-search">
+                    <label>Search</label>
+                    <input type="text" id="gf-search" placeholder="process, command, host...">
+                </div>
+                <button class="gf-reset" id="gf-reset">Reset</button>
+            </div>
             <div id="graph-container">
                 <svg id="graph-svg"></svg>
             </div>
@@ -157,6 +185,32 @@
 
         <!-- Process Tree Panel -->
         <div id="panel-tree" class="panel">
+            <div class="graph-filter-bar" id="tree-filter-bar">
+                <div class="gf-group">
+                    <label>Severity</label>
+                    <select id="tf-sev">
+                        <option value="">All</option>
+                        <option value="critical">Critical</option>
+                        <option value="high">High</option>
+                        <option value="medium">Medium</option>
+                        <option value="low">Low</option>
+                        <option value="benign">Benign</option>
+                    </select>
+                </div>
+                <div class="gf-group">
+                    <label>Process</label>
+                    <select id="tf-proc"><option value="">All Processes</option></select>
+                </div>
+                <div class="gf-group">
+                    <label>Host</label>
+                    <select id="tf-host"><option value="">All Hosts</option></select>
+                </div>
+                <div class="gf-group gf-search">
+                    <label>Search</label>
+                    <input type="text" id="tf-search" placeholder="process, command, host...">
+                </div>
+                <button class="gf-reset" id="tf-reset">Reset</button>
+            </div>
             <div id="tree-container"></div>
         </div>
 
@@ -304,13 +358,13 @@
         <p class="loading-text">Analyzing logs...</p>
     </div>
 
-    <script src="https://d3js.org/d3.v7.min.js"></script>
-    <script src="/js/app.js?v=1775360000"></script>
-    <script src="/js/graph.js?v=1775360000"></script>
-    <script src="/js/process_tree.js?v=1775360000"></script>
-    <script src="/js/query_panel.js?v=1775360000"></script>
-    <script src="/js/hunt_panel.js?v=1775360000"></script>
-    <script src="/js/llm_panel.js?v=1775360000"></script>
-    <script src="/js/timeline.js?v=1775360000"></script>
+    <script src="/js/d3.v7.min.js"></script>
+    <script src="/js/app.js?v=1775409001"></script>
+    <script src="/js/graph.js?v=1775409001"></script>
+    <script src="/js/process_tree.js?v=1775409001"></script>
+    <script src="/js/query_panel.js?v=1775409001"></script>
+    <script src="/js/hunt_panel.js?v=1775409001"></script>
+    <script src="/js/llm_panel.js?v=1775409001"></script>
+    <script src="/js/timeline.js?v=1775409001"></script>
 </body>
 </html>

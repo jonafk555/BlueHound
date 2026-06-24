@@ -87,21 +87,38 @@ const BlueHound = {
         const sizeMB = (file.size / 1024 / 1024).toFixed(1);
         const isLarge = file.size > 50 * 1024 * 1024;
         this.showLoading(isLarge
-            ? `Uploading ${sizeMB} MB — this may take a moment...`
+            ? `Uploading & analyzing ${sizeMB} MB — large files may take 30-60 seconds...`
             : 'Ingesting & analyzing logs...');
         try {
             const form = new FormData();
             form.append('file', file);
-            const resp = await fetch('/api/upload', { method: 'POST', body: form });
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), isLarge ? 300000 : 120000); // 5min for large, 2min for small
+            const resp = await fetch('/api/upload', { method: 'POST', body: form, signal: controller.signal });
+            clearTimeout(timeout);
             if (!resp.ok) {
-                let msg = `Server error (${resp.status})`;
-                try { const e = await resp.json(); msg = e.error || msg; } catch (_) {}
+                let msg;
+                try { const e = await resp.json(); msg = e.detail || e.error || ''; } catch (_) {}
+                if (resp.status === 413) {
+                    msg = `File too large for server (${sizeMB} MB). Try a smaller file or split it.`;
+                } else if (resp.status === 500) {
+                    msg = `Analysis failed — file may be too large for available memory (${sizeMB} MB). Try reducing file size.`;
+                } else if (!msg) {
+                    msg = `Server error (${resp.status})`;
+                }
                 throw new Error(msg);
             }
             const data = await resp.json();
+            if (data.events_truncated) {
+                this._showToast(`Loaded ${data.returned_event_count.toLocaleString()} of ${data.event_count.toLocaleString()} events (truncated for performance)`, 'warning');
+            }
             this.onDataLoaded(data);
         } catch (err) {
-            this._showToast('Upload failed: ' + err.message, 'error');
+            if (err.name === 'AbortError') {
+                this._showToast('Upload timed out — file may be too large. Try a smaller file.', 'error');
+            } else {
+                this._showToast('Upload failed: ' + err.message, 'error');
+            }
         } finally {
             this.hideLoading();
         }
@@ -139,7 +156,9 @@ const BlueHound = {
 
         // Init all panels
         GraphView.render(this.state.graph);
+        GraphView.initFilters(this.state.graph);
         ProcessTree.render(this.state.graph);
+        ProcessTree.initFilters(this.state.graph);
         HuntPanel.render(this.state.findings);
         QueryPanel.init(this.state.facets, this.state.findings);
         LLMPanel.init(this.state.events, this.state.findings, this.state.llmPrescan);

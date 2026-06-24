@@ -19,14 +19,19 @@ const LLMPanel = {
         this.events   = events   || [];
         this.findings = findings || [];
         this.prescan  = prescan  || null;
-        this.bindEvents();
+        if (!this._bound) this.bindEvents();
         this.loadQuickPicks();
         this.renderPrescan();
-        // Auto-generate summary when data loaded
-        this.generateSummary();
+        // Auto-generate AI summary when findings are available
+        if (this.findings && this.findings.length > 0) {
+            this.generateSummary();
+        }
     },
 
+    // showGenerateButton removed — summary is now auto-generated on init
+
     bindEvents() {
+        this._bound = true;
         document.getElementById('llm-analyze-btn').addEventListener('click', () => this.analyze());
         document.getElementById('llm-cmdline-input').addEventListener('keydown', (e) => {
             if (e.ctrlKey && e.key === 'Enter') this.analyze();
@@ -100,18 +105,30 @@ const LLMPanel = {
             this.renderPrescan();
             return;
         }
+        // Auto-expand summary section so user sees the loading/result
+        const section = document.getElementById('llm-summary-section');
+        const toggleBtn = document.getElementById('llm-sum-toggle-btn');
+        if (section && !section.classList.contains('expanded')) {
+            section.classList.add('expanded');
+            if (toggleBtn) toggleBtn.classList.add('rotated');
+        }
+
         const summaryDiv = document.getElementById('llm-summary-result');
         summaryDiv.innerHTML = '<p style="color:var(--text-secondary);font-size:13px;">⏳ Generating threat summary…</p>';
         try {
             const resp = await fetch('/api/llm/summarize', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ events: this.events, findings: this.findings }),
+                body: JSON.stringify({
+                    events: this.events.slice(0, 500),
+                    findings: this.findings.slice(0, 500),
+                }),
             });
             const data = await resp.json();
+            if (!resp.ok) throw new Error(data.error || `Server error (${resp.status})`);
             this.renderSummary(data);
         } catch (err) {
-            summaryDiv.innerHTML = `<p style="color:var(--critical);">Error: ${err.message}</p>`;
+            summaryDiv.innerHTML = `<p style="color:var(--critical);">Error: ${this.esc(err.message)}</p>`;
         }
     },
 
@@ -284,9 +301,10 @@ const LLMPanel = {
                 body: JSON.stringify({ commandline: cmdline, event_context: eventCtx }),
             });
             const data = await resp.json();
+            if (!resp.ok) throw new Error(data.error || `Server error (${resp.status})`);
             this.renderResult(data, cmdline, eventCtx);
         } catch (err) {
-            resultDiv.innerHTML = `<div class="llm-result-card"><p style="color:var(--critical);">Error: ${err.message}</p></div>`;
+            resultDiv.innerHTML = `<div class="llm-result-card"><p style="color:var(--critical);">Error: ${this.esc(err.message)}</p></div>`;
         }
     },
 

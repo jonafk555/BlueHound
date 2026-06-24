@@ -359,8 +359,8 @@ body {
 /* ── Graph Panel ───────────────────────────────────────────── */
 #graph-container {
     width: 100%;
-    height: 100%;
     position: relative;
+    overflow: hidden;
 }
 #graph-svg { width: 100%; height: 100%; }
 
@@ -690,6 +690,11 @@ body {
 .finding-sev.HIGH { background: var(--high); color: #fff; }
 .finding-sev.MEDIUM { background: var(--medium); color: #000; }
 .finding-sev.LOW { background: var(--low); color: #fff; }
+/* Lowercase aliases for severity classes (normalize case mismatches) */
+.finding-sev.critical { background: var(--critical); color: #fff; }
+.finding-sev.high { background: var(--high); color: #fff; }
+.finding-sev.medium { background: var(--medium); color: #000; }
+.finding-sev.low { background: var(--low); color: #fff; }
 .finding-name { font-weight: 600; font-size: 14px; }
 .finding-mitre {
     margin-left: auto;
@@ -889,7 +894,7 @@ body {
 }
 /* Expanded: fully open, no cap */
 .llm-summary-strip.expanded .llm-sum-body {
-    max-height: 2000px;   /* effectively uncapped */
+    max-height: 70vh;    /* Allow it to open very large (near fullscreen) but still trigger scrolling */
     padding: 14px 20px;
     opacity: 1;
     overflow-y: auto;
@@ -1503,3 +1508,70 @@ body {
     .llm-left { width: 100%; border-right: none; border-bottom: 1px solid var(--border); }
     .llm-workspace { flex-direction: column; }
 }
+
+/* ── Graph / Tree Filter Toolbar ──────────────────────────── */
+.graph-filter-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 12px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+    z-index: 20;
+    flex-shrink: 0;
+}
+.gf-group {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+.gf-group label {
+    font-size: 10px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+}
+.gf-group select,
+.gf-group input {
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-size: 11px;
+    font-family: var(--font-body);
+    min-width: 100px;
+    height: 28px;
+}
+.gf-group select:focus,
+.gf-group input:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px var(--accent-glow);
+}
+.gf-search input {
+    min-width: 150px;
+}
+.gf-reset {
+    background: var(--bg-surface);
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 12px;
+    font-size: 11px;
+    height: 28px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.gf-reset:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+/* Adjust graph/tree containers when filter bar is present */
+#panel-graph.active { display: flex; flex-direction: column; }
+#panel-graph #graph-container { flex: 1; min-height: 0; position: relative; }
+#panel-tree.active  { display: flex; flex-direction: column; }
+#panel-tree  #tree-container  { flex: 1; min-height: 0; overflow-y: auto; }

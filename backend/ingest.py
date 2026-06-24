@@ -451,7 +451,7 @@ class LogIngester:
 
     def _normalize(self, raw: Dict) -> Dict:
         """Map raw fields to canonical schema."""
-        norm = {"_raw": raw}
+        norm = {}
         for canon, aliases in CANONICAL_FIELDS.items():
             for alias in aliases:
                 if alias in raw and raw[alias]:

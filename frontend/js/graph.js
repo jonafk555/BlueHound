@@ -15,6 +15,7 @@ const GraphView = {
     simulation: null,
     zoom: null,
     graphData: null,
+    _fullGraphData: null,  // unfiltered original
 
     severityColors: {
         critical: '#ef4444',
@@ -26,6 +27,118 @@ const GraphView = {
 
     typeColors: {
         network: '#a78bfa',
+    },
+
+    // ── Severity normalization helper ─────────────────────
+    _normSev(s) {
+        return (s || 'benign').toLowerCase();
+    },
+
+    // ── Filter support ───────────────────────────────────
+    initFilters(graphData) {
+        this._fullGraphData = graphData;
+        const nodes = graphData.nodes || [];
+
+        // Populate dropdowns
+        const procs = [...new Set(nodes.map(n => n.process_name).filter(Boolean))].sort();
+        const hosts = [...new Set(nodes.map(n => n.hostname).filter(Boolean))].sort();
+        const eids  = [...new Set(nodes.map(n => n.event_id).filter(Boolean))].sort((a, b) => String(a).localeCompare(String(b)));
+
+        this._fillSelect('gf-proc', procs, 'All Processes');
+        this._fillSelect('gf-host', hosts, 'All Hosts');
+        this._fillSelect('gf-eid', eids, 'All');
+
+        // Bind filter events
+        ['gf-sev', 'gf-proc', 'gf-host', 'gf-eid'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener('change', () => this.applyFilters());
+        });
+        const searchEl = document.getElementById('gf-search');
+        if (searchEl) {
+            let debounce;
+            searchEl.addEventListener('input', () => {
+                clearTimeout(debounce);
+                debounce = setTimeout(() => this.applyFilters(), 300);
+            });
+        }
+        const resetBtn = document.getElementById('gf-reset');
+        if (resetBtn) resetBtn.addEventListener('click', () => this.resetFilters());
+    },
+
+    _fillSelect(id, values, defaultLabel) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.innerHTML = '';
+        const def = document.createElement('option');
+        def.value = ''; def.textContent = defaultLabel;
+        el.appendChild(def);
+        values.forEach(v => {
+            const opt = document.createElement('option');
+            opt.value = v; opt.textContent = v;
+            el.appendChild(opt);
+        });
+    },
+
+    applyFilters() {
+        if (!this._fullGraphData) return;
+        const sev    = (document.getElementById('gf-sev')?.value || '').toLowerCase();
+        const proc   = document.getElementById('gf-proc')?.value || '';
+        const host   = document.getElementById('gf-host')?.value || '';
+        const eid    = document.getElementById('gf-eid')?.value || '';
+        const search = (document.getElementById('gf-search')?.value || '').toLowerCase().trim();
+
+        const noFilter = !sev && !proc && !host && !eid && !search;
+        if (noFilter) {
+            this.render(this._fullGraphData);
+            return;
+        }
+
+        const allNodes = this._fullGraphData.nodes || [];
+        const allEdges = this._fullGraphData.edges || [];
+
+        const matchedNodes = allNodes.filter(n => {
+            if (sev && this._normSev(n.severity) !== sev) return false;
+            if (proc && n.process_name !== proc) return false;
+            if (host && n.hostname !== host) return false;
+            if (eid && String(n.event_id) !== String(eid)) return false;
+            if (search) {
+                const haystack = [n.process_name, n.commandline, n.hostname, n.user_name, n.label]
+                    .filter(Boolean).join(' ').toLowerCase();
+                if (!haystack.includes(search)) return false;
+            }
+            return true;
+        });
+
+        // Include parent/child nodes connected to matched nodes
+        const matchedIds = new Set(matchedNodes.map(n => n.id));
+        allEdges.forEach(e => {
+            if (matchedIds.has(e.source) || matchedIds.has(e.target) ||
+                matchedIds.has(e.source?.id) || matchedIds.has(e.target?.id)) {
+                const srcId = typeof e.source === 'object' ? e.source.id : e.source;
+                const tgtId = typeof e.target === 'object' ? e.target.id : e.target;
+                matchedIds.add(srcId);
+                matchedIds.add(tgtId);
+            }
+        });
+
+        const filteredNodes = allNodes.filter(n => matchedIds.has(n.id));
+        const filteredEdges = allEdges.filter(e => {
+            const srcId = typeof e.source === 'object' ? e.source.id : e.source;
+            const tgtId = typeof e.target === 'object' ? e.target.id : e.target;
+            return matchedIds.has(srcId) && matchedIds.has(tgtId);
+        });
+
+        this.render({ nodes: filteredNodes, edges: filteredEdges, stats: this._fullGraphData.stats });
+    },
+
+    resetFilters() {
+        ['gf-sev', 'gf-proc', 'gf-host', 'gf-eid'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.value = '';
+        });
+        const searchEl = document.getElementById('gf-search');
+        if (searchEl) searchEl.value = '';
+        if (this._fullGraphData) this.render(this._fullGraphData);
     },
 
     render(graphData) {
@@ -120,17 +233,29 @@ const GraphView = {
 
         // Node circles
         node.append('circle')
-            .attr('r', d => d.type === 'network' ? 8 : (d.severity === 'critical' ? 14 : d.severity === 'high' ? 12 : 10))
+            .attr('r', d => {
+                const s = this._normSev(d.severity);
+                return d.type === 'network' ? 8 : (s === 'critical' ? 14 : s === 'high' ? 12 : 10);
+            })
             .attr('fill', d => this.getNodeColor(d))
             .attr('stroke', d => this.getNodeColor(d))
-            .attr('stroke-width', d => d.severity === 'critical' || d.severity === 'high' ? 2 : 1)
+            .attr('stroke-width', d => {
+                const s = this._normSev(d.severity);
+                return s === 'critical' || s === 'high' ? 2 : 1;
+            })
             .attr('stroke-opacity', 0.5)
-            .attr('filter', d => (d.severity === 'critical' || d.severity === 'high') ? 'url(#glow)' : null);
+            .attr('filter', d => {
+                const s = this._normSev(d.severity);
+                return (s === 'critical' || s === 'high') ? 'url(#glow)' : null;
+            });
 
         // Node labels
         node.append('text')
             .attr('class', 'graph-label')
-            .attr('dy', d => (d.type === 'network' ? 18 : (d.severity === 'critical' ? 26 : 22)))
+            .attr('dy', d => {
+                const s = this._normSev(d.severity);
+                return d.type === 'network' ? 18 : (s === 'critical' ? 26 : 22);
+            })
             .text(d => d.label || d.process_name || d.id.substring(0, 8));
 
         // Tick update
@@ -154,7 +279,8 @@ const GraphView = {
 
     getNodeColor(node) {
         if (node.type === 'network') return this.typeColors.network;
-        return this.severityColors[node.severity] || this.severityColors.benign;
+        const s = this._normSev(node.severity);
+        return this.severityColors[s] || this.severityColors.benign;
     },
 
     dragStart(event, d) {
@@ -178,17 +304,19 @@ const GraphView = {
         const sidebar = document.getElementById('node-detail');
         const content = document.getElementById('detail-content');
         
-        const sevClass = `badge-${node.severity || 'benign'}`;
+        const sev = this._normSev(node.severity);
+        const sevClass = `badge-${sev}`;
         let rulesHtml = '';
         if (node.rules && node.rules.length > 0) {
             rulesHtml = '<div class="detail-field"><div class="detail-field-label">Matched Rules</div>';
             node.rules.forEach(r => {
                 // VULN-18: escape r.name and r.severity — both come from log data (attacker-controlled)
                 const safeName = this.escapeHtml(String(r.name || ''));
-                const safeSev  = this.escapeHtml(String(r.severity || ''));
+                const ruleSev  = (r.severity || '').toLowerCase();
+                const safeSev  = this.escapeHtml(ruleSev);
                 rulesHtml += `<div class="detail-rule">
                     <div class="detail-rule-name">${safeName}</div>
-                    <span class="finding-sev ${safeSev}">${safeSev}</span>
+                    <span class="finding-sev ${safeSev}">${safeSev.toUpperCase()}</span>
                 </div>`;
             });
             rulesHtml += '</div>';
@@ -231,7 +359,7 @@ const GraphView = {
         let cmdlineLinks = '';
         if (node.commandline) {
             const ipMatches = node.commandline.match(/\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(?::\d+)?\b/g) || [];
-            const urlMatches = node.commandline.match(/https?:\/\/[^\s'")\]]+/g) || [];
+            const urlMatches = node.commandline.match(/https?:\/\/[^\s'\")\]]+/g) || [];
             const allLinks = [...new Set([...ipMatches, ...urlMatches])];
             if (allLinks.length > 0) {
                 cmdlineLinks = '<div class="detail-field"><div class="detail-field-label">Embedded IPs / URLs</div>';
@@ -245,8 +373,8 @@ const GraphView = {
 
         content.innerHTML = `
             <div class="detail-header">
-                <span class="detail-sev-badge ${sevClass}">${node.severity || 'benign'}</span>
-                <span style="font-size:16px;font-weight:600;">${node.label || node.process_name || 'Unknown'}</span>
+                <span class="detail-sev-badge ${sevClass}">${sev}</span>
+                <span style="font-size:16px;font-weight:600;">${this.escapeHtml(String(node.label || node.process_name || 'Unknown'))}</span>
             </div>
             ${this.detailField('Process Name', node.process_name)}
             ${this.detailField('Process Path', node.process_path, true)}

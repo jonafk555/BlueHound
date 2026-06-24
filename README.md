@@ -2,6 +2,8 @@
 
 ### Graph-Driven Threat Hunting Workbench
 
+[English Version](./README_EN.md)
+
 [![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.138-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![MITRE ATT&CK](https://img.shields.io/badge/MITRE_ATT%26CK-v15-ED1C24?logo=data:image/svg+xml;base64,PHN2Zy8+&logoColor=white)](https://attack.mitre.org)
@@ -18,14 +20,19 @@
 
 ## 📸 預覽
 
+- `Graph View` 功能：讓威脅獵捕人員可以透過力導向圖快速分析多個 `IP`, `主機`, `Parent Process`, `Child Process` 之間的關係。
 <img width="1502" height="818" alt="image" src="https://github.com/user-attachments/assets/8b1a8438-3733-4ded-b0c1-144c49e7a7bd" />
 
+- `Process Tree` 功能：讓威脅獵捕人員可以更加了解不同程序之間的關係，以及透過 LLM 標記威脅風險，能讓威脅獵捕人員快速識別風險來源。
 <img width="1502" height="818" alt="image" src="https://github.com/user-attachments/assets/abc5785f-8971-4e28-a78b-27eacee5fb93" />
 
+- `Timeline` 功能：威脅獵捕人員可以透過限制時間區段以及選擇不同風險、主機、Process 來了解不同時機內發生的威脅。
 <img width="1502" height="818" alt="image" src="https://github.com/user-attachments/assets/38937000-1565-4dd5-9f6b-5c94a53b8a3d" />
 
+- `Threat Hunt` 功能：直接標記可能風險，威脅獵捕人員可以在最快時間內了解風險，以便後續分析
 <img width="1502" height="818" alt="image" src="https://github.com/user-attachments/assets/71e3de54-9eeb-4269-8aab-da03bc41fa94" />
 
+- `LLM analyzer` 功能：在匯入 log 後，LLM 先行自動分析 log 可能威脅，並在 Session Summary 中將 log 中概況標記出。此外，使用者也可以透過自行查詢來了解威脅資訊。
 <img width="1502" height="818" alt="image" src="https://github.com/user-attachments/assets/4e6e5e95-3aa2-4981-9fe8-8192d5981014" />
 
 
@@ -435,4 +442,3 @@ docker compose -f docker-compose.yml -f docker-compose.override.yml up --build
 **Built for Blue Teamers, by Blue Teamers** 🛡️
 
 </div>
-]]>

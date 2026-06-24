@@ -15,13 +15,14 @@ const HuntPanel = {
         const container = document.getElementById('hunt-summary');
         container.innerHTML = '';
 
-        // Count by severity
-        const counts = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 };
+        // Count by severity (case-insensitive)
+        const counts = { critical: 0, high: 0, medium: 0, low: 0 };
         const tactics = {};
         const techniques = {};
 
         this.findings.forEach(f => {
-            counts[f.severity] = (counts[f.severity] || 0) + 1;
+            const s = (f.severity || '').toLowerCase();
+            if (counts[s] !== undefined) counts[s]++;
             if (f.tactic) tactics[f.tactic] = (tactics[f.tactic] || 0) + 1;
             if (f.mitre) techniques[f.mitre] = (techniques[f.mitre] || 0) + 1;
         });
@@ -29,9 +30,9 @@ const HuntPanel = {
         // Cards
         const cards = [
             { label: 'Total Findings', value: this.findings.length, cls: '' },
-            { label: 'Critical', value: counts.CRITICAL, cls: 'critical' },
-            { label: 'High', value: counts.HIGH, cls: 'high' },
-            { label: 'Medium', value: counts.MEDIUM, cls: 'medium' },
+            { label: 'Critical', value: counts.critical, cls: 'critical' },
+            { label: 'High', value: counts.high, cls: 'high' },
+            { label: 'Medium', value: counts.medium, cls: 'medium' },
             { label: 'Unique Techniques', value: Object.keys(techniques).length, cls: '' },
             { label: 'ATT&CK Tactics', value: Object.keys(tactics).length, cls: '' },
         ];
@@ -73,7 +74,7 @@ const HuntPanel = {
             const item = document.createElement('div');
             item.className = 'finding-item';
             // VULN-09: ALL values from log data must be escaped before innerHTML insertion
-            const sev    = this.escapeHtml(f.severity || '');
+            const sev    = this.escapeHtml((f.severity || '').toLowerCase());
             const mitre  = this.escapeHtml(f.mitre || '');
             const ts     = this.escapeHtml((f.timestamp || '').replace('T', ' ').replace('Z', ''));
             const cmdHtml = f.commandline
@@ -81,7 +82,7 @@ const HuntPanel = {
                 : '';
             item.innerHTML = `
                 <div class="finding-header">
-                    <span class="finding-sev ${sev}">${sev}</span>
+                    <span class="finding-sev ${sev}">${sev.toUpperCase()}</span>
                     <span class="finding-name">${this.escapeHtml(f.rule_name)}</span>
                     <span class="finding-mitre">${mitre}</span>
                 </div>

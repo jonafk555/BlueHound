@@ -1,6 +1,9 @@
-"""Graph engine — builds process tree and network topology using NetworkX."""
-import networkx as nx
+"""Graph engine — builds process tree and network topology for D3.js."""
 from typing import List, Dict, Any
+
+
+MAX_GRAPH_NODES = int(__import__('os').getenv('BLUEHOUND_MAX_GRAPH_NODES', '500'))
+MAX_GRAPH_EDGES = int(__import__('os').getenv('BLUEHOUND_MAX_GRAPH_EDGES', '2000'))
 
 
 class GraphEngine:
@@ -16,11 +19,13 @@ class GraphEngine:
                     finding_guids[guid] = []
                 finding_guids[guid].append(f)
 
-        G = nx.DiGraph()
         nodes_map = {}
         edges = []
 
         for ev in events:
+            # Early exit: stop processing if we already have far more nodes than we can display
+            if len(nodes_map) > MAX_GRAPH_NODES * 3:
+                break
             pguid = ev.get("process_guid")
             ppguid = ev.get("parent_process_guid")
             if not pguid:
@@ -134,15 +139,40 @@ class GraphEngine:
                 seen_edges.add(key)
                 unique_edges.append(e)
 
+        # ── Truncate graph if too large (prioritize high-severity nodes) ──
+        truncated = False
+        all_nodes = list(nodes_map.values())
+        if len(all_nodes) > MAX_GRAPH_NODES:
+            truncated = True
+            sev_order = {'critical': 4, 'high': 3, 'medium': 2, 'low': 1, 'benign': 0}
+            all_nodes.sort(key=lambda n: sev_order.get(n.get('severity', 'benign'), 0), reverse=True)
+            kept_nodes = all_nodes[:MAX_GRAPH_NODES]
+            kept_ids = {n['id'] for n in kept_nodes}
+            # Also keep parents of kept nodes to preserve tree structure
+            for e in unique_edges:
+                if e['target'] in kept_ids and e['source'] in nodes_map:
+                    kept_ids.add(e['source'])
+            kept_nodes = [n for n in nodes_map.values() if n['id'] in kept_ids]
+            unique_edges = [e for e in unique_edges if e['source'] in kept_ids and e['target'] in kept_ids]
+        else:
+            kept_nodes = all_nodes
+
+        if len(unique_edges) > MAX_GRAPH_EDGES:
+            truncated = True
+            unique_edges = unique_edges[:MAX_GRAPH_EDGES]
+
         return {
-            "nodes": list(nodes_map.values()),
+            "nodes": kept_nodes,
             "edges": unique_edges,
             "stats": {
                 "total_nodes": len(nodes_map),
                 "total_edges": len(unique_edges),
-                "critical": sum(1 for n in nodes_map.values() if n.get("severity") == "critical"),
-                "high": sum(1 for n in nodes_map.values() if n.get("severity") == "high"),
-                "medium": sum(1 for n in nodes_map.values() if n.get("severity") == "medium"),
+                "displayed_nodes": len(kept_nodes),
+                "displayed_edges": len(unique_edges),
+                "truncated": truncated,
+                "critical": sum(1 for n in kept_nodes if n.get("severity") == "critical"),
+                "high": sum(1 for n in kept_nodes if n.get("severity") == "high"),
+                "medium": sum(1 for n in kept_nodes if n.get("severity") == "medium"),
             }
         }
 

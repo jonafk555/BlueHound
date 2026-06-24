@@ -9,10 +9,12 @@ services:
     container_name: bluehound
     restart: unless-stopped
     ports:
-      - "8443:8443"
+      - "127.0.0.1:8443:8443"
     env_file:
       - .env                      # local secrets — never committed to VCS
     environment:
+      BLUEHOUND_ENV: "production"
+      BLUEHOUND_API_KEY: "${BLUEHOUND_API_KEY:-}"
       BLUEHOUND_HOST: "0.0.0.0"   # must bind to all interfaces inside Docker
       BLUEHOUND_PORT: "8443"
       # If using local Ollama service below:
@@ -24,7 +26,7 @@ services:
         condition: service_started
     healthcheck:
       test: ["CMD", "python3", "-c",
-             "import urllib.request; urllib.request.urlopen('http://localhost:8443/')"]
+             "import urllib.request; urllib.request.urlopen('http://localhost:8443/healthz')"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -50,7 +52,7 @@ services:
     container_name: bluehound-ollama
     restart: unless-stopped
     ports:
-      - "11434:11434"             # only needed if you want host access to Ollama
+      - "127.0.0.1:11434:11434"   # localhost only; remove if host access is unnecessary
     volumes:
       - ollama-models:/root/.ollama   # persist downloaded models
     networks:

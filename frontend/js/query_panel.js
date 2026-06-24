@@ -111,6 +111,7 @@ const QueryPanel = {
                 body: JSON.stringify({ filters, format: this.format }),
             });
             const data = await resp.json();
+            if (!resp.ok) throw new Error(data.error || `Server error (${resp.status})`);
             document.getElementById('query-result').textContent = data.query || 'No query generated.';
         } catch (err) {
             document.getElementById('query-result').textContent = 'Error generating query: ' + err.message;

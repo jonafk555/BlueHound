@@ -29,10 +29,10 @@ WORKDIR /app
 # Copy pre-installed packages from builder
 COPY --from=builder /install /usr/local
 
-# Copy application source
-COPY backend/   ./backend/
-COPY frontend/  ./frontend/
-COPY playbooks/ ./playbooks/
+# Copy application source (ensure readable by non-root user regardless of host perms)
+COPY --chmod=755 backend/   ./backend/
+COPY --chmod=755 frontend/  ./frontend/
+COPY --chmod=755 playbooks/ ./playbooks/
 
 # Create writable tmp dir for uploads (used by tempfile in main.py)
 RUN mkdir -p /tmp/bluehound && chown bluehound:bluehound /tmp/bluehound
@@ -43,13 +43,14 @@ USER bluehound
 # Expose service port
 EXPOSE 8443
 
-# Health check (lightweight — just hits the static root)
+# Health check uses a non-sensitive endpoint and does not bypass API authentication.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:8443/')" || exit 1
+    CMD python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:8443/healthz')" || exit 1
 
 # Default env (overrideable via docker run -e / compose env_file)
 ENV BLUEHOUND_HOST=0.0.0.0 \
     BLUEHOUND_PORT=8443 \
+    BLUEHOUND_ENV=production \
     LLM_BACKEND=fallback \
     OLLAMA_URL=http://ollama:11434 \
     OLLAMA_MODEL=llama3.2 \
