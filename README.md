@@ -1,5 +1,3 @@
-<![CDATA[<div align="center">
-
 # 🔵 BlueHound
 
 ### Graph-Driven Threat Hunting Workbench
@@ -442,4 +440,3 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 **Built for Blue Teamers, by Blue Teamers** 🛡️
 
 </div>
-]]>
