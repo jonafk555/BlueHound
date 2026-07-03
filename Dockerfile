@@ -37,6 +37,14 @@ COPY --chmod=755 playbooks/ ./playbooks/
 # Create writable tmp dir for uploads (used by tempfile in main.py)
 RUN mkdir -p /tmp/bluehound && chown bluehound:bluehound /tmp/bluehound
 
+# Durable state dir for triage / feedback / proposed-rules (FR-3/FR-5). Created
+# owned by the non-root user BEFORE the volume mounts so a fresh named volume
+# inherits writable ownership. Mount a volume here in compose for persistence.
+RUN mkdir -p /data && chown bluehound:bluehound /data
+VOLUME ["/data"]
+ENV BLUEHOUND_STATE_DIR=/data \
+    BLUEHOUND_TRIAGE_DB=/data/triage_state.json
+
 # Drop to non-root for runtime
 USER bluehound
 

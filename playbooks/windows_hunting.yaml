@@ -105,6 +105,18 @@ rules:
     description: "Attempt to dump LSASS process memory for credential extraction."
     hunt_guidance: "Verify legitimacy with sysadmin. Cross-reference with Sysmon EID 10 (ProcessAccess to lsass)."
 
+  - id: TH-025
+    name: "LSASS Process Access (Credential Dumping)"
+    mitre: T1003.001
+    tactic: "Credential Access"
+    severity: CRITICAL
+    match:
+      event_id: [10]
+      target_image_regex: "(?i)lsass\\.exe"
+      granted_access_dangerous: true
+    description: "A process opened a handle to lsass.exe with memory-read, VM-operation, or handle-duplication rights (Sysmon EID 10 ProcessAccess). This is the canonical OS Credential Dumping (LSASS Memory) signal and, unlike TH-009/TH-010, does not depend on a command line — it fires on the raw EDR access telemetry."
+    hunt_guidance: "Identify the SourceImage. Query-only access (0x1000) by svchost/wininit is benign and is excluded by the GrantedAccess filter. PowerShell, cmd, rundll32, procdump, or unknown binaries reading LSASS memory (PROCESS_VM_READ 0x10) or duplicating its handle (PROCESS_DUP_HANDLE 0x40) indicate credential theft. Pivot on the source process GUID, review the parent chain, and check for follow-on lateral movement or DCSync."
+
   - id: TH-010
     name: "Mimikatz Indicators"
     mitre: T1003.001
@@ -155,7 +167,10 @@ rules:
     severity: HIGH
     match:
       process_name: ["sc.exe"]
-      commandline_regex: "(?i)(\\\\\\\\.*create|\\\\\\\\.*config|\\\\\\\\.*start)"
+      # S-DOS-03: bound the span between the UNC marker and the verb to avoid the
+      # O(n^2) backtracking of the previous unbounded `\\.*verb`. Single-quoted YAML
+      # keeps backslashes literal (avoids the \n/\b escaping footgun of BH-SEC-009).
+      commandline_regex: '(?i)\\\\[^\n]{0,200}?(create|config|start)\b'
     description: "sc.exe used to create or modify services on remote hosts."
     hunt_guidance: "Remote service creation is a classic lateral movement/persistence technique."
 

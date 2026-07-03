@@ -34,6 +34,14 @@ const GraphView = {
         return (s || 'benign').toLowerCase();
     },
 
+    // Whitelist a severity to a safe CSS-class token. escapeHtml does NOT escape
+    // double-quotes, so a raw value interpolated into class="suspect-${...}" could
+    // break out of the attribute. Class tokens must therefore come from an allowlist.
+    _sevClassToken(s) {
+        const v = String(s || '').toLowerCase();
+        return ['critical', 'high', 'medium', 'low', 'benign'].includes(v) ? v : 'unknown';
+    },
+
     // ── Filter support ───────────────────────────────────
     initFilters(graphData) {
         this._fullGraphData = graphData;
@@ -423,9 +431,7 @@ const GraphView = {
     },
 
     escapeHtml(s) {
-        const div = document.createElement('div');
-        div.textContent = s;
-        return div.innerHTML;
+        return (window.BHUtils ? BHUtils.esc(s) : (s == null ? '' : String(s)));
     },
 
     resize() {

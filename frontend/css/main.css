@@ -105,10 +105,19 @@ body {
 
 .nav-tabs {
     display: flex;
+    align-items: center;
     gap: 2px;
     margin-left: 20px;
     flex: 1;
+    min-width: 0;
+    overflow-x: auto;          /* narrow screens: scroll instead of hiding tabs */
+    scrollbar-width: thin;
 }
+.nav-tabs::-webkit-scrollbar { height: 5px; }
+.nav-tabs::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+/* IA grouping: Explore | Triage | Analysis tools */
+.nav-group { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+.nav-divider { width: 1px; height: 20px; background: var(--border); margin: 0 8px; flex-shrink: 0; }
 .nav-tab {
     display: flex;
     align-items: center;
@@ -267,20 +276,34 @@ body {
 }
 .panel.active { display: flex; }
 
-/* ── Landing ───────────────────────────────────────────────── */
+/* ── Landing ─────────────────────────────────────────────────
+   Landing is a *scrollable*, height-capped column instead of a fixed
+   `justify-content:center` block — on shorter viewports the previous
+   layout pushed the demo dropdown menu below the fold with no scroll,
+   and the animated icon caused the sample menu to overflow the viewport
+   entirely. Cap the icon, give the container real vertical scrolling,
+   and let content sit at the top when it doesn't all fit. */
+#panel-landing.panel { align-items: flex-start; }
 .landing-content {
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     width: 100%;
-    gap: 16px;
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 32px 24px 48px;
+    gap: 14px;
     text-align: center;
     animation: fadeIn 0.8s ease;
+    box-sizing: border-box;
 }
-.landing-icon { margin-bottom: 8px; }
+.landing-icon { margin-bottom: 4px; width: 96px; height: 96px; }
+.landing-icon svg { width: 100%; height: 100%; display: block; }
 .landing-content h1 {
-    font-size: 42px;
+    font-size: 36px;
+    line-height: 1.15;
+    margin: 0;
     font-weight: 700;
     background: linear-gradient(135deg, #4fc3f7, #81d4fa, #0288d1);
     -webkit-background-clip: text;
@@ -288,24 +311,29 @@ body {
     background-clip: text;
 }
 .landing-subtitle {
-    font-size: 16px;
+    font-size: 15px;
     color: var(--text-secondary);
     font-weight: 300;
+    margin: 0;
 }
 .landing-desc {
-    font-size: 14px;
+    font-size: 13.5px;
     color: var(--text-muted);
-    max-width: 450px;
+    max-width: 460px;
+    line-height: 1.55;
+    margin: 0;
 }
 .landing-actions {
     display: flex;
     gap: 12px;
-    margin-top: 12px;
+    margin-top: 8px;
+    flex-wrap: wrap;
+    justify-content: center;
 }
 .landing-formats {
     font-size: 12px;
     color: var(--text-muted);
-    margin-top: 8px;
+    margin-top: 4px;
 }
 .landing-formats span {
     display: inline-block;
@@ -317,6 +345,31 @@ body {
     font-size: 11px;
     color: var(--text-secondary);
 }
+/* Very short viewports: shrink the animated icon further so actions stay in view. */
+@media (max-height: 620px) {
+    .landing-icon { width: 64px; height: 64px; }
+    .landing-content h1 { font-size: 28px; }
+    .landing-content { padding-top: 16px; gap: 10px; }
+}
+
+/* Nav actions: swap upload/demo for Export PDF once a session is loaded.
+   `.loaded` is applied to <body> by app.js when data comes back.
+   `!important` is required because `.btn-primary` — defined earlier in this
+   file — also sets `display: inline-flex` at the same specificity and would
+   otherwise resolve to visible in the pre-loaded state. */
+.nav-postload { display: none !important; }
+body.loaded .nav-preload { display: none !important; }
+body.loaded .nav-postload { display: inline-flex !important; align-items: center; gap: 6px; }
+#export-pdf-btn {
+    padding: 6px 14px; border-radius: 6px; font-size: 13px; font-weight: 600;
+    background: linear-gradient(135deg, #0288d1, #4fc3f7);
+    color: #ffffff; border: none; cursor: pointer;
+    box-shadow: 0 1px 3px rgba(2, 136, 209, 0.35);
+    transition: transform 0.1s, box-shadow 0.15s, filter 0.15s;
+}
+#export-pdf-btn:hover { filter: brightness(1.08); box-shadow: 0 2px 6px rgba(2, 136, 209, 0.45); }
+#export-pdf-btn:active { transform: translateY(1px); }
+#export-pdf-btn[disabled] { opacity: 0.6; cursor: progress; filter: none; }
 
 /* ── Buttons ───────────────────────────────────────────────── */
 .btn-primary {
@@ -660,7 +713,28 @@ body {
 .hunt-card-value.critical { color: var(--critical); }
 .hunt-card-value.high { color: var(--high); }
 .hunt-card-value.medium { color: var(--medium); }
-
+.hunt-card-clickable { cursor: pointer; user-select: none; }
+.hunt-card-clickable:hover { transform: translateY(-2px); }
+.hunt-card-active {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px var(--accent-glow, rgba(79,195,247,0.25));
+    background: rgba(79,195,247,0.06);
+}
+.hunt-clear-filter {
+    background: var(--bg-surface);
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.hunt-clear-filter:hover { border-color: var(--accent); color: var(--accent); }
+.findings-heading-row {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; margin-bottom: 14px;
+}
 .hunt-findings { width: 100%; }
 .finding-item {
     background: var(--bg-surface);
@@ -869,9 +943,20 @@ body {
 }
 
 /* ── LLM Panel ─────────────────────────────────────────────── */
+/* Force the LLM panel itself to act as a column flex container so the
+   summary strip stretches to the panel width instead of sizing to content. */
+#panel-llm.active {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
 .llm-root {
     display: flex;
     flex-direction: column;
+    flex: 1;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
     height: 100%;
     overflow: hidden;
     background: var(--bg-primary);
@@ -880,9 +965,12 @@ body {
 /* ① Summary strip */
 .llm-summary-strip {
     flex-shrink: 0;
+    width: 100%;
+    min-width: 0;
     border-bottom: 1px solid var(--border);
     background: var(--bg-surface);
     overflow: hidden;
+    box-sizing: border-box;
 }
 /* Collapsed: hide body entirely, show only header */
 .llm-summary-strip .llm-sum-body {
@@ -890,15 +978,57 @@ body {
     padding: 0 20px;
     opacity: 0;
     overflow: hidden;
+    word-break: break-word;
+    overflow-wrap: anywhere;
     transition: max-height 0.35s ease, padding 0.35s ease, opacity 0.25s ease;
 }
 /* Expanded: fully open, no cap */
 .llm-summary-strip.expanded .llm-sum-body {
-    max-height: 70vh;    /* Allow it to open very large (near fullscreen) but still trigger scrolling */
+    max-height: 70vh;
     padding: 14px 20px;
     opacity: 1;
     overflow-y: auto;
+    overflow-x: hidden;
 }
+/* Fullscreen: cover the whole panel so the summary can be read large */
+.llm-summary-strip.fullscreen {
+    position: absolute;
+    inset: 0;
+    z-index: 50;
+    height: 100%;
+    width: 100%;
+    background: var(--bg-surface);
+    display: flex;
+    flex-direction: column;
+}
+.llm-summary-strip.fullscreen .llm-sum-body {
+    max-height: none;
+    flex: 1;
+    padding: 16px 24px;
+    opacity: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+.llm-summary-strip.fullscreen .llm-sum-header {
+    flex-shrink: 0;
+}
+.llm-sum-fullscreen {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    border-radius: 4px;
+    width: 26px;
+    height: 26px;
+    cursor: pointer;
+    font-size: 13px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+.llm-sum-fullscreen:hover { border-color: var(--accent); color: var(--accent); }
+.llm-summary-strip.fullscreen .llm-sum-fullscreen { color: var(--accent); border-color: var(--accent); }
 
 .llm-sum-header {
     display: flex;
@@ -942,8 +1072,26 @@ body {
 }
 
 /* Summary card (rendered inside .llm-sum-body) */
-.summary-card { display: flex; flex-direction: column; gap: 10px; }
-.summary-top  { display: flex; align-items: center; gap: 10px; }
+.summary-card {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 0;
+    max-width: 100%;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+}
+.summary-card pre,
+.summary-card code,
+.summary-card .summary-exec,
+.summary-card .summary-narrative {
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    max-width: 100%;
+}
+.summary-tags-row > div { min-width: 0; max-width: 100%; }
+.summary-top  { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .summary-sev-badge {
     padding: 3px 10px;
     border-radius: 20px;
@@ -1502,11 +1650,15 @@ body {
 
 /* ── Responsive ────────────────────────────────────────────── */
 @media (max-width: 768px) {
-    .nav-tabs { display: none; }
+    /* Keep tabs reachable on narrow screens via horizontal scroll (was hidden). */
+    .nav-tab { padding: 6px 10px; font-size: 12px; }
+    .nav-divider { margin: 0 4px; }
     .query-layout, .llm-layout { grid-template-columns: 1fr; }
     .detail-sidebar { width: 100%; }
     .llm-left { width: 100%; border-right: none; border-bottom: 1px solid var(--border); }
     .llm-workspace { flex-direction: column; }
+    /* Single-column card grids on small screens */
+    #hyp-list, .hunt-summary { grid-template-columns: 1fr !important; }
 }
 
 /* ── Graph / Tree Filter Toolbar ──────────────────────────── */
@@ -1569,9 +1721,222 @@ body {
     background: var(--bg-hover);
     color: var(--text-primary);
 }
+/* ── Incidents Panel (human-on-the-loop triage) ───────────── */
+#panel-incidents.active { display: flex; flex-direction: column; }
+.incidents-layout { display: flex; flex-direction: column; width: 100%; height: 100%; overflow: hidden; }
+.incidents-bar {
+    flex-shrink: 0; display: flex; align-items: center; justify-content: space-between;
+    gap: 16px; padding: 12px 20px; border-bottom: 1px solid var(--border);
+    background: var(--bg-surface); flex-wrap: wrap;
+}
+.inc-summary { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 13px; color: var(--text-secondary); }
+.inc-stat b { color: var(--text-primary); font-family: var(--font-mono); margin-left: 4px; }
+.inc-stat-open b { color: var(--high); }
+.inc-chip { padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 700; font-family: var(--font-mono); }
+.inc-hide-closed { font-size: 12px; color: var(--text-muted); display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.incidents-list { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; }
+
+.incident-card {
+    background: var(--bg-surface); border: 1px solid var(--border);
+    border-left: 4px solid var(--border); border-radius: var(--radius-lg);
+    padding: 14px 16px; transition: border-color 0.2s, opacity 0.2s;
+}
+.incident-card.sev-critical { border-left-color: var(--critical); }
+.incident-card.sev-high     { border-left-color: var(--high); }
+.incident-card.sev-medium   { border-left-color: var(--medium); }
+.incident-card.sev-low      { border-left-color: var(--low); }
+.incident-card.incident-closed { opacity: 0.55; }
+.incident-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.incident-title { font-size: 14px; font-weight: 600; color: var(--text-primary); flex: 1; min-width: 0; }
+.incident-narrative { font-size: 12px; color: var(--text-secondary); line-height: 1.6; margin: 8px 0; word-break: break-word; overflow-wrap: anywhere; }
+.incident-tags { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 6px; }
+.inc-tag { padding: 1px 7px; border-radius: 4px; font-size: 11px; font-family: var(--font-mono); background: var(--bg-primary); border: 1px solid var(--border); color: var(--text-secondary); }
+.inc-tag.mitre { color: #c084fc; border-color: rgba(168,85,247,0.4); }
+.inc-tag-label { font-size: 10px; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.05em; }
+.inc-prio-badge { padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; }
+.prio-P0 { background: rgba(239,68,68,0.18); color: #ef4444; }
+.prio-P1 { background: rgba(249,115,22,0.18); color: #f97316; }
+.prio-P2 { background: rgba(234,179,8,0.18); color: #eab308; }
+.prio-P3 { background: rgba(59,130,246,0.18); color: #60a5fa; }
+.inc-status-pill { padding: 2px 9px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+.status-new { background: var(--bg-primary); color: var(--text-muted); border: 1px solid var(--border); }
+.status-pending_fix { background: rgba(249,115,22,0.15); color: #f97316; }
+.status-remediated { background: rgba(34,197,94,0.15); color: #22c55e; }
+.status-excluded { background: rgba(148,163,184,0.15); color: #94a3b8; }
+.status-risk_accepted { background: rgba(168,85,247,0.15); color: #c084fc; }
+/* Attack chain — larger, easier-to-read event rows. */
+.incident-findings { margin: 6px 0; font-size: 14px; }
+.incident-findings summary { cursor: pointer; color: var(--text-muted); font-size: 13px; padding: 4px 0; }
+.inc-finding { display: flex; gap: 10px; align-items: center; font-size: 14px; margin: 6px 0; line-height: 1.5; }
+.inc-finding-name { color: var(--text-primary); font-weight: 500; }
+.inc-finding-meta { color: var(--text-muted); font-size: 12.5px; }
+.inc-finding-cmd { font-family: var(--font-mono); font-size: 12px; color: var(--text-primary); background: var(--bg-primary); border-radius: 4px; padding: 6px 10px; margin: 4px 0 10px; word-break: break-all; line-height: 1.5; }
+.inc-finding-name { flex: 1; min-width: 0; }
+/* Exclude action — high-affordance red button (white text). Restore uses a
+   green tone so the two states are visually distinguishable at a glance. */
+.inc-exclude-btn {
+    margin-left: auto; flex-shrink: 0;
+    background: #dc2626; border: 1px solid #dc2626; color: #ffffff;
+    border-radius: 6px; padding: 4px 12px; font-size: 12.5px; font-weight: 600;
+    letter-spacing: 0.02em; cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+.inc-exclude-btn:hover { background: #b91c1c; border-color: #b91c1c; box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.25); }
+.inc-finding-excluded .inc-exclude-btn { background: #16a34a; border-color: #16a34a; }
+.inc-finding-excluded .inc-exclude-btn:hover { background: #15803d; border-color: #15803d; box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.25); }
+.inc-finding-excluded { opacity: 0.55; }
+.inc-finding-excluded .inc-finding-name,
+.inc-finding-excluded .inc-finding-meta,
+.inc-finding-excluded.inc-finding-cmd { text-decoration: line-through; }
+.incident-triage {
+    display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap;
+    margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border);
+}
+.triage-field { display: flex; flex-direction: column; gap: 3px; }
+.triage-field label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
+.triage-field select, .triage-note {
+    background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border);
+    border-radius: 6px; padding: 5px 8px; font-size: 12px; height: 30px;
+}
+.triage-note-field { flex: 1; min-width: 160px; }
+.triage-note { width: 100%; box-sizing: border-box; }
+.incident-triage .btn-primary { padding: 6px 16px; font-size: 12px; height: 30px; }
+.triage-saved { color: #22c55e; font-size: 12px; }
 
 /* Adjust graph/tree containers when filter bar is present */
 #panel-graph.active { display: flex; flex-direction: column; }
 #panel-graph #graph-container { flex: 1; min-height: 0; position: relative; }
 #panel-tree.active  { display: flex; flex-direction: column; }
 #panel-tree  #tree-container  { flex: 1; min-height: 0; overflow-y: auto; }
+
+/* ── FR-1 NL Hunt merged into LLM Analyzer: mode tabs ───────── */
+.llm-mode-tabs { display: flex; gap: 4px; padding: 8px 16px 0; flex-shrink: 0; }
+.llm-mode-tab {
+    background: none; border: 1px solid var(--border); border-bottom: none;
+    color: var(--text-secondary); padding: 7px 14px; font-size: 12px; cursor: pointer;
+    border-radius: 8px 8px 0 0; transition: all 0.15s;
+}
+.llm-mode-tab:hover { color: var(--text-primary); }
+.llm-mode-tab.active { background: var(--bg-surface); color: var(--accent); border-color: var(--accent); }
+.llm-mode-pane.hidden { display: none !important; }
+.llm-left .llm-mode-pane { display: flex; flex-direction: column; min-height: 0; }
+.llm-left .llm-mode-pane[data-mode="hunt"] { padding: 0 16px 12px; gap: 8px; }
+#nlhunt-input { width: calc(100% - 32px); margin: 6px 16px; padding: 10px; min-height: 90px;
+    background: var(--bg-primary); border: 1px solid var(--border); color: var(--text-primary);
+    font-family: var(--font-mono); font-size: 12px; border-radius: var(--radius-sm); resize: vertical;
+    outline: none; box-sizing: border-box; line-height: 1.5; }
+#nlhunt-input:focus { border-color: var(--accent); }
+.llm-hunt-examples { font-size: 11px; color: var(--text-muted); padding: 0 16px; line-height: 1.6; }
+/* Hunt thread occupies the shared right pane */
+#nlhunt-thread:not(.hidden) { display: flex; flex-direction: column; gap: 14px; overflow-y: auto; height: 100%; }
+
+/* ── Hypotheses: full-width column panel ─ */
+#panel-hypotheses.active { display: flex; flex-direction: column; }
+#panel-hypotheses .hyp-root { flex: 1; min-height: 0; width: 100%; }
+/* Responsive card grid uses the whole width (was a single narrow left column) */
+#hyp-list {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+    gap: 14px; align-content: start; align-items: start;
+}
+#hyp-list > .fr-placeholder, #hyp-list > .fr-banner { grid-column: 1 / -1; }
+.hyp-card { height: 100%; }
+
+/* ── FR panels: shared building blocks (migrated from inline styles) ── */
+.fr-card { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-size: 13px; display: flex; flex-direction: column; }
+.fr-card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.fr-title { font-weight: 600; flex: 1; min-width: 0; }
+.fr-prov { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+.fr-muted { font-size: 12px; color: var(--text-secondary); margin: 4px 0; }
+.fr-banner { font-size: 11px; color: var(--text-muted); }
+.fr-summary { cursor: pointer; font-size: 12px; color: var(--text-secondary); }
+.fr-code { background: var(--bg-primary); padding: 8px; border-radius: 6px; overflow: auto; font-size: 11px; max-height: 200px; margin: 4px 0 0; white-space: pre-wrap; word-break: break-word; }
+.fr-controls { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.fr-conf { flex: 0 0 auto; width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px; border: 3px solid currentColor; }
+.fr-select { font-size: 12px; padding: 3px 6px; border-radius: 6px; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border); margin-left: auto; }
+.fr-ir-line { font-family: var(--font-mono); font-size: 11px; margin: 2px 0; }
+.fr-ir-rel { font-family: var(--font-mono); font-size: 11px; color: var(--accent); margin: 2px 0; }
+.fr-tag { display: inline-block; font-size: 10px; padding: 1px 6px; margin: 2px 4px 2px 0; border: 1px solid var(--border); border-radius: 4px; color: var(--accent); }
+.fr-status-badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; border: 1px solid currentColor; }
+.fr-placeholder { color: var(--text-muted); font-size: 13px; text-align: center; padding: 24px; }
+.fr-collapse { margin-top: 6px; }
+.fr-metrics { font-size: 12px; color: var(--text-secondary); margin: 4px 0; }
+.fr-decided { font-size: 11px; color: var(--text-muted); margin-top: 6px; }
+
+/* ── Hypotheses: categorised threat detail ─────────────────── */
+.hyp-detail-grid {
+    display: grid;
+    grid-template-columns: 130px 1fr;
+    column-gap: 12px;
+    row-gap: 6px;
+    margin: 10px 0 4px;
+    padding: 10px 12px;
+    background: rgba(15, 23, 42, 0.35);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 12.5px;
+}
+.hyp-detail-row { display: contents; }
+.hyp-detail-label {
+    color: var(--text-muted);
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    font-size: 11px;
+    padding-top: 2px;
+}
+.hyp-detail-value { color: var(--text-primary); display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; }
+.hyp-detail-none { color: var(--text-muted); font-style: italic; }
+.hyp-chip {
+    display: inline-flex; align-items: center;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11.5px;
+    font-weight: 500;
+    line-height: 1.4;
+    border: 1px solid transparent;
+    white-space: nowrap;
+}
+.hyp-chip-host   { background: rgba(59, 130, 246, 0.12); color: #60a5fa; border-color: rgba(59, 130, 246, 0.3); }
+.hyp-chip-user   { background: rgba(168, 85, 247, 0.12); color: #c084fc; border-color: rgba(168, 85, 247, 0.3); }
+.hyp-chip-mitre  { background: rgba(239, 68, 68, 0.12); color: #f87171; border-color: rgba(239, 68, 68, 0.3); text-decoration: none; }
+.hyp-chip-mitre[href]:hover { background: rgba(239, 68, 68, 0.22); }
+.hyp-chip-tactic { background: rgba(234, 179, 8, 0.12); color: #facc15; border-color: rgba(234, 179, 8, 0.3); }
+.hyp-section { margin-top: 10px; }
+.hyp-section-label {
+    color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em;
+    font-size: 10.5px; font-weight: 700; margin-bottom: 4px;
+}
+.hyp-section-body { color: var(--text-primary); font-size: 12.5px; line-height: 1.55; }
+.hyp-evidence summary { cursor: pointer; }
+.hyp-evidence-row { padding: 6px 0; border-top: 1px dashed var(--border); }
+.hyp-evidence-row:first-of-type { border-top: none; }
+.hyp-evidence-meta { color: var(--text-secondary); font-size: 12px; }
+.hyp-evidence-cmd { font-family: var(--font-mono); font-size: 11.5px; color: var(--text-primary); background: var(--bg-primary); border-radius: 4px; padding: 4px 8px; margin-top: 3px; word-break: break-all; }
+.hyp-status-label { font-size: 12px; color: var(--text-muted); display: inline-flex; align-items: center; gap: 6px; margin-left: auto; }
+/* NL Hunt thread (conversational) */
+.nlhunt-q { align-self: flex-end; max-width: 80%; background: var(--accent); color: #fff; padding: 8px 12px; border-radius: 12px 12px 2px 12px; font-size: 13px; }
+.nlhunt-card { background: var(--bg-surface); padding: 12px; border-radius: 8px; border: 1px solid var(--border); font-size: 13px; }
+.nlhunt-card-err { border-left: 3px solid var(--critical, #ef4444); }
+.nlhunt-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+.nlhunt-siem-bar { display: flex; gap: 6px; margin-bottom: 4px; }
+.nlhunt-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.nlhunt-table th { text-align: left; padding: 3px 6px; border-bottom: 1px solid var(--border); color: var(--text-muted); }
+.nlhunt-table td { padding: 3px 6px; border-bottom: 1px solid var(--border); max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* LLM Analyzer: similarity + feedback (FR-4/FR-5) */
+.llm-draft-btn { margin-top: 10px; font-size: 12px; }
+.llm-sim-body { font-size: 12px; color: var(--text-secondary); }
+.llm-sim-flag { font-weight: 600; margin-bottom: 4px; }
+.llm-sim-meta { font-size: 11px; color: var(--text-muted); }
+.llm-sim-row { font-size: 11px; font-family: var(--font-mono); }
+.llm-fb-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.llm-fb-analyst { max-width: 110px; }
+.llm-fb-status { font-size: 12px; color: var(--text-muted); }
+.llm-fb-corr { display: none; gap: 8px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
+.llm-fb-corr.show { display: flex; }
+/* visible keyboard focus across interactive controls (a11y) */
+.nav-tab:focus-visible, .llm-mode-tab:focus-visible, .inc-exclude-btn:focus-visible,
+.fr-select:focus-visible, .btn-primary:focus-visible, .btn-ghost:focus-visible,
+.btn-secondary:focus-visible, .hunt-card-clickable:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px;
+}

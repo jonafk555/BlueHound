@@ -6,9 +6,11 @@ const BlueHound = {
     state: {
         events: [],
         findings: [],
+        incidents: [],
         graph: null,
         facets: {},
         llmPrescan: null,
+        sessionId: null,
         activePanel: 'landing',
         selectedFormat: 'kql',
     },
@@ -17,6 +19,67 @@ const BlueHound = {
         this.bindNav();
         this.bindUpload();
         this.bindDemo();
+        this.bindExport();
+    },
+
+    bindExport() {
+        const btn = document.getElementById('export-pdf-btn');
+        if (!btn) return;
+        btn.addEventListener('click', () => this.exportPDF());
+    },
+
+    async exportPDF() {
+        const btn = document.getElementById('export-pdf-btn');
+        if (!this.state.sessionId && !this.state.events.length) {
+            this._showToast('Load a dataset before exporting a report.', 'error');
+            return;
+        }
+        if (btn) btn.disabled = true;
+        this.showLoading('Generating PDF report…');
+        // Post the currently-visible dashboard snapshot back. The server escapes
+        // and caps every string before rendering — see backend/pdf_report.py.
+        const payload = {
+            session_id: this.state.sessionId,
+            event_count: this.state._eventCountTotal || this.state.events.length,
+            events_truncated: !!this.state._eventsTruncated,
+            finding_count: (this.state.findings || []).length,
+            finding_severity_counts: this._countFindingsBySeverity(this.state.findings),
+            incidents: (this.state.incidents || []).slice(0, 200),
+            findings: (this.state.findings || []).slice(0, 5000),
+            hypotheses: (window.HypothesesPanel && HypothesesPanel.hypotheses) || [],
+            llm_prescan: this.state.llmPrescan || null,
+            llm_summary: (window.LLMPanel && LLMPanel.lastSummary) || null,
+            incident_count: (this.state.incidents || []).length,
+        };
+        try {
+            const resp = await fetch('/api/report/pdf', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            if (!resp.ok) {
+                let msg = `Server error (${resp.status})`;
+                try { const e = await resp.json(); msg = e.error || msg; } catch (_) {}
+                throw new Error(msg);
+            }
+            const blob = await resp.blob();
+            // Trigger browser download.
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            const stamp = new Date().toISOString().slice(0, 16).replace('T', '-').replace(':', '');
+            a.download = `bluehound-report-${stamp}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 500);
+            this._showToast('PDF report downloaded.');
+        } catch (err) {
+            this._showToast('Export failed: ' + err.message, 'error');
+        } finally {
+            if (btn) btn.disabled = false;
+            this.hideLoading();
+        }
     },
 
     bindNav() {
@@ -145,9 +208,16 @@ const BlueHound = {
     onDataLoaded(data) {
         this.state.events = data.events || [];
         this.state.findings = data.findings || [];
+        this.state.incidents = data.incidents || [];
         this.state.graph = data.graph || { nodes: [], edges: [] };
         this.state.facets = data.facets || {};
         this.state.llmPrescan = data.llm_prescan || null;
+        this.state.sessionId = data.session_id || null;
+        this.state._eventCountTotal = data.event_count || this.state.events.length;
+        this.state._eventsTruncated = !!data.events_truncated;
+
+        // Flip nav actions: hide Upload/Load-Demo, reveal Export PDF.
+        document.body.classList.add('loaded');
 
         // Update stats
         this.updateStats(data);
@@ -160,8 +230,11 @@ const BlueHound = {
         ProcessTree.render(this.state.graph);
         ProcessTree.initFilters(this.state.graph);
         HuntPanel.render(this.state.findings);
+        IncidentsPanel.render(this.state.incidents);
         QueryPanel.init(this.state.facets, this.state.findings);
         LLMPanel.init(this.state.events, this.state.findings, this.state.llmPrescan);
+        NLHuntPanel.init(this.state.sessionId);
+        HypothesesPanel.init(this.state.sessionId);
         TimelineView.init(this.state.events, this.state.findings);
 
         // Switch to graph
@@ -174,9 +247,22 @@ const BlueHound = {
         const stats = data.graph?.stats || {};
         document.getElementById('stat-nodes').textContent = stats.total_nodes || 0;
         document.getElementById('stat-edges').textContent = stats.total_edges || 0;
-        document.getElementById('stat-critical').textContent = stats.critical || 0;
-        document.getElementById('stat-high').textContent = stats.high || 0;
-        document.getElementById('stat-medium').textContent = stats.medium || 0;
+        // Threat counts come from the deduped findings list — that is what
+        // Threat Hunt / Process Tree / Timeline highlight, so the stats bar
+        // must use the same source instead of node-severity counts.
+        const sevCounts = data.finding_severity_counts || this._countFindingsBySeverity(data.findings);
+        document.getElementById('stat-critical').textContent = sevCounts.critical || 0;
+        document.getElementById('stat-high').textContent     = sevCounts.high     || 0;
+        document.getElementById('stat-medium').textContent   = sevCounts.medium   || 0;
+    },
+
+    _countFindingsBySeverity(findings) {
+        const out = { critical: 0, high: 0, medium: 0, low: 0 };
+        (findings || []).forEach(f => {
+            const s = (f.severity || '').toLowerCase();
+            if (out[s] !== undefined) out[s]++;
+        });
+        return out;
     },
 
     switchPanel(name) {
@@ -195,6 +281,10 @@ const BlueHound = {
         // Re-render timeline when switching to it
         if (name === 'timeline' && this.state.events.length > 0) {
             setTimeout(() => TimelineView.render(), 50);
+        }
+        // Lazily generate hypotheses the first time the board is opened.
+        if (name === 'hypotheses' && window.HypothesesPanel) {
+            HypothesesPanel.onShow();
         }
     },
 

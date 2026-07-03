@@ -43,16 +43,45 @@ const LLMPanel = {
         const toggleBtn = document.getElementById('llm-sum-toggle-btn');
         const strip = document.getElementById('llm-summary-section');
         const sumHeader = strip?.querySelector('.llm-sum-header');
+        const fsBtn = document.getElementById('llm-sum-fullscreen-btn');
         if (toggleBtn && strip && sumHeader) {
-            const doToggle = () => {
+            const doToggle = (e) => {
+                // Ignore clicks that originated on action buttons
+                if (e && e.target.closest('.llm-sum-actions')) return;
                 strip.classList.toggle('expanded');
                 toggleBtn.classList.toggle('rotated');
             };
             sumHeader.addEventListener('click', doToggle);
-            // Prevent Re-generate button from also toggling
+            toggleBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                strip.classList.toggle('expanded');
+                toggleBtn.classList.toggle('rotated');
+            });
             const regenBtnInner = document.getElementById('llm-regen-summary-btn');
             if (regenBtnInner) regenBtnInner.addEventListener('click', e => e.stopPropagation());
         }
+        // Fullscreen toggle for the summary strip
+        if (fsBtn && strip) {
+            fsBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const goingFullscreen = !strip.classList.contains('fullscreen');
+                strip.classList.toggle('fullscreen');
+                // Ensure body is visible when entering fullscreen
+                if (goingFullscreen) {
+                    strip.classList.add('expanded');
+                    if (toggleBtn) toggleBtn.classList.add('rotated');
+                }
+            });
+            // ESC exits fullscreen
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && strip.classList.contains('fullscreen')) {
+                    strip.classList.remove('fullscreen');
+                }
+            });
+        }
+
+        // Mode tabs: Event Analyzer ⇄ NL Hunt (NL Hunt merged into this panel).
+        this.bindModeTabs();
 
         // Clear button
         const clearBtn = document.getElementById('llm-clear-btn');
@@ -70,6 +99,23 @@ const LLMPanel = {
                     </div>`;
             });
         }
+    },
+
+    // Toggle between Event Analyzer and NL Hunt modes inside this panel.
+    bindModeTabs() {
+        const tabs = Array.from(document.querySelectorAll('.llm-mode-tab'));
+        if (!tabs.length) return;
+        const setMode = (mode) => {
+            tabs.forEach(t => t.classList.toggle('active', t.dataset.mode === mode));
+            document.querySelectorAll('.llm-mode-pane').forEach(p => {
+                p.classList.toggle('hidden', p.dataset.mode !== mode);
+            });
+            if (mode === 'hunt') {
+                const inp = document.getElementById('nlhunt-input');
+                if (inp) inp.focus();
+            }
+        };
+        tabs.forEach(t => t.addEventListener('click', () => setMode(t.dataset.mode)));
     },
 
     loadQuickPicks() {
@@ -126,6 +172,8 @@ const LLMPanel = {
             });
             const data = await resp.json();
             if (!resp.ok) throw new Error(data.error || `Server error (${resp.status})`);
+            // Cache the most recent LLM summary so the PDF export can embed it.
+            this.lastSummary = data;
             this.renderSummary(data);
         } catch (err) {
             summaryDiv.innerHTML = `<p style="color:var(--critical);">Error: ${this.esc(err.message)}</p>`;
@@ -399,12 +447,154 @@ const LLMPanel = {
             const url = el.getAttribute('data-url');
             if (url) el.addEventListener('click', () => window.open(url, '_blank', 'noopener,noreferrer'));
         });
+
+        // FR-4: fetch + render the embedding similarity signal for this command.
+        this.renderSimilarity(cmdline, resultDiv);
+
+        // FR-5: analyst verdict feedback (agree/disagree → /api/feedback).
+        this.renderFeedback(cmdline, ctx, data, resultDiv);
+    },
+
+    // FR-4: embedding similarity intelligence, rendered into the result card.
+    async renderSimilarity(cmdline, resultDiv) {
+        const firstCard = resultDiv.querySelector('.llm-result-card');
+        if (!firstCard) return;
+        const section = document.createElement('div');
+        section.className = 'llm-result-section';
+        const h = document.createElement('h4');
+        h.textContent = 'Similarity Intelligence (embedding)';
+        const body = document.createElement('div');
+        body.className = 'llm-sim-body';
+        body.textContent = '⏳ comparing to known-bad corpus…';
+        section.appendChild(h); section.appendChild(body);
+        firstCard.appendChild(section);
+        try {
+            const resp = await fetch('/api/llm/similar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ commandline: cmdline, k: 3 }),
+            });
+            const d = await resp.json();
+            if (!resp.ok) throw new Error(d.error || `Server error (${resp.status})`);
+            body.innerHTML = '';
+            const flag = document.createElement('div');
+            const c = d.similar_to_known_bad ? '#ef4444' : '#22c55e';
+            flag.className = 'llm-sim-flag'; flag.style.color = c;
+            flag.textContent = d.similar_to_known_bad
+                ? `⚠ Resembles known-bad (${d.cluster_id}) — score ${d.max_known_bad_score}`
+                : `✓ No strong resemblance to known-bad (score ${d.max_known_bad_score})`;
+            body.appendChild(flag);
+            const meta = document.createElement('div');
+            meta.className = 'llm-sim-meta';
+            meta.textContent = `novelty ${d.novelty} · source ${d.source} · ${d.model_id}`;
+            body.appendChild(meta);
+            (d.neighbors || []).forEach(n => {
+                const row = document.createElement('div');
+                row.className = 'llm-sim-row';
+                row.textContent = `${n.label} · ${n.score}`;
+                body.appendChild(row);
+            });
+        } catch (err) {
+            body.textContent = 'Similarity unavailable: ' + err.message;
+        }
+    },
+
+    // FR-5: analyst verdict feedback. All DOM-API built (no innerHTML w/ user data).
+    renderFeedback(cmdline, ctx, data, resultDiv) {
+        const firstCard = resultDiv.querySelector('.llm-result-card');
+        if (!firstCard) return;
+        const section = document.createElement('div');
+        section.className = 'llm-result-section llm-feedback';
+        const h = document.createElement('h4');
+        h.textContent = 'Was this verdict correct?';
+        section.appendChild(h);
+
+        const row = document.createElement('div');
+        row.className = 'llm-fb-row';
+
+        const analystInput = document.createElement('input');
+        analystInput.type = 'text';
+        analystInput.placeholder = 'analyst';
+        analystInput.className = 'llm-ctx-input';
+        analystInput.classList.add('llm-fb-analyst');
+        // localStorage can throw (private mode / blocked / opaque origin) — guard it.
+        try { analystInput.value = localStorage.getItem('bh_analyst') || ''; } catch (_) { analystInput.value = ''; }
+
+        const agreeBtn = document.createElement('button');
+        agreeBtn.className = 'btn-secondary';
+        agreeBtn.style.fontSize = '12px';
+        agreeBtn.textContent = '✓ Agree';
+
+        const disagreeBtn = document.createElement('button');
+        disagreeBtn.className = 'btn-ghost';
+        disagreeBtn.style.fontSize = '12px';
+        disagreeBtn.textContent = '✗ Disagree';
+
+        const status = document.createElement('span');
+        status.className = 'llm-fb-status';
+
+        const llmVerdict = { is_malicious: !!data.is_malicious, severity: data.severity || 1 };
+        const analyst = () => (analystInput.value.trim() || 'analyst');
+        const remember = () => { try { localStorage.setItem('bh_analyst', analyst()); } catch (_) {} };
+
+        const submit = async (body) => {
+            remember();
+            status.textContent = '⏳ saving…';
+            try {
+                const resp = await fetch('/api/feedback', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ commandline: cmdline, context: ctx || {},
+                        analyst: analyst(), llm_verdict: llmVerdict, ...body }),
+                });
+                const d = await resp.json();
+                if (!resp.ok) throw new Error(d.error || `Server error (${resp.status})`);
+                status.textContent = `✓ recorded (trust ${d.trust})`;
+                agreeBtn.disabled = disagreeBtn.disabled = true;
+            } catch (err) {
+                status.textContent = 'Save failed: ' + err.message;
+            }
+        };
+
+        agreeBtn.addEventListener('click', () => submit({ agree: true }));
+        disagreeBtn.addEventListener('click', () => {
+            // Reveal a correction form: corrected verdict + severity.
+            corr.classList.add('show');
+        });
+
+        row.appendChild(analystInput);
+        row.appendChild(agreeBtn);
+        row.appendChild(disagreeBtn);
+        row.appendChild(status);
+        section.appendChild(row);
+
+        // Correction form (hidden until Disagree)
+        const corr = document.createElement('div');
+        corr.className = 'llm-fb-corr';
+        const verdictSel = document.createElement('select');
+        verdictSel.className = 'llm-ctx-input'; verdictSel.style.maxWidth = '130px';
+        [['true', 'Malicious'], ['false', 'Benign']].forEach(([v, label]) => {
+            const o = document.createElement('option'); o.value = v; o.textContent = label;
+            verdictSel.appendChild(o);
+        });
+        verdictSel.value = data.is_malicious ? 'false' : 'true';  // default to the opposite (they disagreed)
+        const sevSel = document.createElement('select');
+        sevSel.className = 'llm-ctx-input'; sevSel.style.maxWidth = '90px';
+        for (let i = 1; i <= 10; i++) { const o = document.createElement('option'); o.value = i; o.textContent = 'sev ' + i; sevSel.appendChild(o); }
+        sevSel.value = String(data.severity || 5);
+        const sendCorr = document.createElement('button');
+        sendCorr.className = 'btn-primary'; sendCorr.style.fontSize = '12px'; sendCorr.textContent = 'Submit correction';
+        sendCorr.addEventListener('click', () => submit({
+            agree: false,
+            corrected_is_malicious: verdictSel.value === 'true',
+            corrected_severity: parseInt(sevSel.value, 10),
+        }));
+        corr.appendChild(verdictSel); corr.appendChild(sevSel); corr.appendChild(sendCorr);
+        section.appendChild(corr);
+
+        firstCard.appendChild(section);
     },
 
     esc(s) {
-        if (!s) return '';
-        const d = document.createElement('div');
-        d.textContent = String(s);
-        return d.innerHTML;
+        return (window.BHUtils ? BHUtils.esc(s) : (s == null ? '' : String(s)));
     }
 };

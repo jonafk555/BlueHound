@@ -11,19 +11,29 @@ services:
     ports:
       - "127.0.0.1:8443:8443"
     env_file:
-      - .env                      # local secrets — never committed to VCS
+      # Local secrets (never committed). Optional so `docker compose up` works
+      # without a .env file present.
+      - path: .env
+        required: false
     environment:
       BLUEHOUND_ENV: "production"
       BLUEHOUND_API_KEY: "${BLUEHOUND_API_KEY:-}"
       BLUEHOUND_HOST: "0.0.0.0"   # must bind to all interfaces inside Docker
       BLUEHOUND_PORT: "8443"
-      # If using local Ollama service below:
+      # Used only when LLM_BACKEND=ollama and the `llm` profile is started.
       OLLAMA_URL: "http://ollama:11434"
+      OLLAMA_MODEL: "${OLLAMA_MODEL:-llama3.2}"
+      OLLAMA_EMBED_MODEL: "${OLLAMA_EMBED_MODEL:-nomic-embed-text}"   # FR-4 similarity
+      # Durable state for incident triage / analyst feedback / proposed rules
+      # (FR-5) — written to the bluehound-state volume mounted at /data.
+      BLUEHOUND_STATE_DIR: "/data"
+      BLUEHOUND_TRIAGE_DB: "/data/triage_state.json"
+      # FR-5 few-shot trust list (analysts whose labels feed the LLM examples).
+      BLUEHOUND_TRUSTED_ANALYSTS: "${BLUEHOUND_TRUSTED_ANALYSTS:-}"
       # Comma-separated allowed CORS origins (from behind a reverse proxy, add your domain)
       ALLOWED_ORIGINS: "http://localhost:8443,http://127.0.0.1:8443"
-    depends_on:
-      ollama:
-        condition: service_started
+    # No hard dependency on ollama: the analyzer degrades to heuristic when no
+    # model is reachable, and ollama is opt-in via the `llm` profile.
     healthcheck:
       test: ["CMD", "python3", "-c",
              "import urllib.request; urllib.request.urlopen('http://localhost:8443/healthz')"]
@@ -32,25 +42,29 @@ services:
       retries: 3
       start_period: 15s
     volumes:
+      # Durable triage / feedback / proposed-rules state (survives restarts).
+      - bluehound-state:/data
       # Mount playbooks directory so rules can be edited without rebuilding
       - ./playbooks:/app/playbooks:ro
       # Optional: persist sample_data
       - ./backend/sample_data:/app/backend/sample_data:ro
     networks:
       - bluehound-net
-    # Security: drop all Linux capabilities, read-only root fs
+    # Security: drop all Linux capabilities, read-only root fs (/data + /tmp stay writable)
     read_only: true
     tmpfs:
       - /tmp                      # tempfile needs writable /tmp
     cap_drop:
       - ALL
 
-  # ── Ollama (local LLM — optional) ────────────────────────────
-  # Remove this service if using OpenAI or running Ollama externally.
+  # ── Ollama (local LLM — optional, opt-in) ────────────────────
+  # Only starts with: docker compose --profile llm up
+  # (plain `docker compose up` runs BlueHound alone with the heuristic fallback).
   ollama:
     image: ollama/ollama:latest
     container_name: bluehound-ollama
     restart: unless-stopped
+    profiles: ["llm"]
     ports:
       - "127.0.0.1:11434:11434"   # localhost only; remove if host access is unnecessary
     volumes:
@@ -68,6 +82,7 @@ services:
 
 volumes:
   ollama-models:
+  bluehound-state:      # durable triage / feedback / proposed-rules (FR-3/FR-5)
 
 networks:
   bluehound-net:

@@ -1,8 +1,8 @@
+<div align="center">
+
 # 🔵 BlueHound
 
 ### Graph-Driven Threat Hunting Workbench
-
-[中文版](./README.md)
 
 [![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.138-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
@@ -10,63 +10,96 @@
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white)](https://docker.com)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**BlueHound** is a graph-driven Windows / Linux threat hunting platform that integrates LLM semantic analysis, MITRE ATT&CK mapping, interactive process trees, and force-directed graph visualization. It helps blue team analysts quickly identify attack chains from large volumes of security logs.
+[中文版](./README.md)
 
-[Features](#-features) · [Quick Start](#-quick-start) · [Architecture Overview](#-architecture-overview) · [API Reference](#-api-reference) · [Security Hardening](#-security-hardening)
+**BlueHound** is a graph-driven Windows / Linux threat hunting platform that integrates LLM semantic analysis, MITRE ATT&CK mapping, interactive process trees, and force-directed graph visualization. It helps blue team analysts quickly identify attack chains from large volumes of security logs. Features include natural-language hunt queries, AI hypothesis generation, incident triage, embedding similarity analysis, and PDF report export.
+
+[Features](#-features) · [Quick Start](#-quick-start) · [Architecture Overview](#-architecture-overview) · [API Reference](#-api-reference) · [Security Hardening](#-security-hardening) · [Configuration](#️-configuration)
+
+</div>
 
 ---
 
 ## 📸 Preview
 
-- `Graph View`: Enables threat hunters to quickly analyze relations among multiple `IPs`, `Hosts`, `Parent Processes`, and `Child Processes` through a force-directed graph.
-<img width="1502" height="818" alt="image" src="https://github.com/user-attachments/assets/8b1a8438-3733-4ded-b0c1-144c49e7a7bd" />
-
-- `Process Tree`: Helps threat hunters understand the relationships between different processes. Highlighting threat risks via LLM allows threat hunters to quickly identify the sources of risk.
-<img width="1502" height="818" alt="image" src="https://github.com/user-attachments/assets/abc5785f-8971-4e28-a78b-27eacee5fb93" />
-
-- `Timeline`: Threat hunters can filter by time ranges, threat levels, hosts, or processes to trace threats occurring across different timeframes.
-<img width="1502" height="818" alt="image" src="https://github.com/user-attachments/assets/38937000-1565-4dd5-9f6b-5c94a53b8a3d" />
-
-- `Threat Hunt`: Highlights potential risks directly, allowing threat hunters to grasp key threat indicators in the shortest time for further analysis.
-<img width="1502" height="818" alt="image" src="https://github.com/user-attachments/assets/71e3de54-9eeb-4269-8aab-da03bc41fa94" />
-
-- `LLM Analyzer`: Upon importing logs, the LLM automatically scans the logs for potential threats beforehand and highlights the overview in the Session Summary. Users can also query the LLM to learn more about specific threats.
-<img width="1502" height="818" alt="image" src="https://github.com/user-attachments/assets/4e6e5e95-3aa2-4981-9fe8-8192d5981014" />
-
-
-> Upload Windows / Linux security logs → Automatic Parsing → Rule Engine Detection → LLM Semantic Pre-scan → Graph Visualization → Generate Hunting Report
+> Upload Windows / Linux security logs → Auto-parse → Rule engine detection → LLM semantic pre-scan → Embedding similarity → Graph visualization → Incident triage → PDF hunting report
 
 ---
 
 ## ✨ Features
 
 ### 🔍 Multi-Format Log Parsing Engine
-- **Supported Formats**: JSON, CSV (including Kibana exports), XML (Windows Event Log), LOG (NDJSON/Syslog), EVTX (Native Windows Event)
-- **Large File Streaming Parser**: Automatically switches to streaming mode for files exceeding 50 MB, supporting three streaming strategies: NDJSON, concatenated JSON, and JSON Array.
-- **Unified Normalization**: Automaps 60+ field aliases to a 6-dimensional standard schema (Meta/Process/Network/File/AD/Label).
+- **Supported formats**: JSON, CSV (including Kibana exports), XML (Windows Event Log), LOG (NDJSON/Syslog), EVTX (native Windows events)
+- **Large file streaming**: Automatically switches to streaming mode for files over 50 MB; supports NDJSON, concatenated JSON, and JSON Array streaming strategies
+- **Unified normalization**: 60+ field aliases automatically mapped to a six-dimension standard schema (Meta / Process / Network / File / AD / Label)
 
-### 🧠 LLM Semantic Analysis (Three-Tier Fallback Architecture)
+### 🧠 LLM Semantic Analysis (Three-Tier Fallback)
+
 | Tier | Engine | Description |
-|------|------|------|
-| 1 | **Ollama** (Local) | Privacy-first, zero risk of data leakage. |
-| 2 | **OpenAI** (Cloud) | Cloud-based backup engine with high accuracy. |
-| 3 | **Heuristic Engine** | 30+ regex rules for zero-latency offline analysis. |
+|------|--------|-------------|
+| 1 | **Ollama** (local) | Privacy-first, zero data leakage risk |
+| 2 | **OpenAI** (cloud) | High-precision analysis fallback |
+| 3 | **Heuristic engine** | 30+ regex rules, zero-latency offline analysis |
 
-- **Pre-Scan Pipeline**: Automatically performs semantic pre-scanning (Plan → Execute → Report) upon log upload.
-- **Command Line Analysis**: Identifies obfuscated PowerShell, AMSI/ETW bypass, download cradles, and DCSync attacks.
-- **Session Summary**: Generates high-level threat intelligence reports containing attack narratives, affected hosts/accounts, and recommended actions.
+- **Pre-Scan Pipeline**: Automatic semantic pre-scan on upload (Plan → Execute → Report)
+- **Command-line analysis**: Identifies obfuscated PowerShell, AMSI/ETW bypass, download cradles, DCSync
+- **Session summary**: Generates high-level threat intelligence reports with attack narrative, affected hosts/accounts, and recommended actions
+- **Structured output validation**: All LLM JSON outputs are type-, length-, and enum-validated via `llm_schema.py`
+
+### 💬 Natural-Language Hunting (FR-1)
+- **NL → Hunt Query IR**: Analysts ask questions in natural language; the LLM translates them into a structured intermediate representation (Hunt Query IR)
+- **Deterministic executor**: Whitelisted fields + operators only, no `eval`; the IR is executed safely server-side
+- **Conversational follow-ups**: Multi-turn conversations with `use_previous` to scope to prior results
+- **SIEM query export**: Simultaneously generates KQL / SPL / Sigma queries for direct import into Sentinel / Splunk
+
+### 🎯 AI Hypothesis Generation (FR-2)
+- **Ranked hypothesis cards**: Automatically generates prioritized threat hypotheses from session data
+- **Grounded validation**: Each hypothesis carries an executable Hunt Query IR with immediate evidence counts
+- **Anti-hallucination**: Hypotheses referencing entities/techniques absent from the session are automatically filtered out
+
+### 🔗 Embedding Similarity Analysis (FR-4)
+- **Local-first embeddings**: Ollama embeddings (e.g., nomic-embed-text); cloud is opt-in only
+- **Known-bad matching**: Nearest-neighbor analysis against a seeded known-bad corpus
+- **Clustering labels**: Similar activities are automatically grouped for triage
+- **Novelty detection**: Distance measurement from the benign baseline
+- **Deterministic fallback**: Falls back to hashed char-n-gram embeddings when no model is available
+
+### 📝 Analyst Feedback Loop (FR-5)
+- **Verdict feedback**: Analysts can agree/disagree with LLM verdicts and provide corrected labels
+- **Few-shot learning**: Feedback from trusted analysts is automatically injected as examples for subsequent analyses
+- **Trust weights**: Configurable trusted analyst list to prevent training set poisoning (OWASP LLM04)
+- **JSONL export**: Annotated datasets can be exported for offline fine-tuning/evaluation, with optional de-identification
 
 ### 🛡️ Threat Detection Engine
-- **24 YAML Playbook Rules** covering 14 MITRE ATT&CK techniques.
-- **SSH Brute Force Correlation Detection**: Correlates events across timelines to identify three distinct stages: enumeration → target account identification → compromise.
-- **DCSync Fast Detection**: Uses GUID comparison + EID 4662 dedicated execution paths.
-- **Abnormal Parent-Child Process Detection**: Identifies anomalies based on known legitimate process relationships.
+- **25 YAML Playbook rules** covering multiple MITRE ATT&CK techniques
+- **SSH brute force correlation**: Cross-event correlation identifying enumeration → target account → compromise stages
+- **DCSync fast detection**: GUID matching + EID 4662 dedicated path
+- **Anomalous parent-child process detection**: Based on known legitimate relationship baselines
+- **ReDoS protection**: `regex_safety.py` validates all user/LLM-generated regex patterns for safety
+
+### 🚨 Incident Correlation & Triage
+- **Automatic incident correlation**: Aggregates findings into incidents by severity, time window, host/account dimensions
+- **Priority suggestions**: Severity → P0–P3 auto-mapping (LLM/rules suggest, humans decide)
+- **Human-on-the-loop**: Analysts can mark incidents as excluded, remediated, pending fix, or risk accepted
+- **Fine-grained exclusion**: Individual findings within an incident can be excluded without dismissing the entire incident
+- **Persistence**: Triage state is persisted as JSON; survives container restarts
 
 ### 📊 Interactive Visualization
-- **Force-Directed Graph** (D3.js): Visualizes process nodes + network nodes with threat-severity coloring.
-- **Process Tree**: Hierarchical parent-child process relationship expansion.
-- **Timeline**: Chronological event sequence analysis.
-- **KQL / SPL / Sigma Query Generator**: One-click generation of hunting queries ready for Sentinel, Splunk, or other SIEMs.
+- **Force-directed graph** (D3.js): Process nodes + network nodes + threat severity coloring
+- **Process tree**: Hierarchical parent-child relationship expansion
+- **Timeline**: Event temporal analysis
+- **KQL / SPL / Sigma query generator**: One-click generation of hunting queries for SIEM import
+
+### 📄 PDF Report Export
+- **Branded design report**: Blue gradient title, severity color chips, dark cover panel
+- **Fully offline**: Uses ReportLab — no Chromium or web font downloads required
+- **Safe rendering**: All untrusted log strings are escaped and truncated
+- **Server-stamped identity**: Analyst identity and generation time in the PDF are server-issued and cannot be spoofed
+
+### 📈 Model Governance
+- **Provenance tracking**: Every LLM response is stamped with `model_id` (e.g., `ollama/llama3.2`) and `source` (llm / heuristic / llm-invalid / llm-skipped)
+- **Token budgets**: Per-request / per-session token limits to prevent runaway costs
+- **Session TTL**: Budgets reset on a time-windowed basis
 
 ---
 
@@ -74,27 +107,27 @@
 
 ### Prerequisites
 - Python 3.12+
-- (Optional) [Ollama](https://ollama.ai) — For local LLM inference
+- (Optional) [Ollama](https://ollama.ai) — Local LLM inference
 - (Optional) Docker & Docker Compose
 
-### Method 1: One-Click Startup (Recommended)
+### Option 1: One-Command Launch (Recommended)
 
 ```bash
 git clone https://github.com/jonafk555/BlueHound.git
 cd BlueHound
 
-# Copy environment template
+# Copy environment config
 cp .env.example .env
-# Edit .env to configure LLM backend and API Key
+# Edit .env to configure LLM backend and API key
 
-# Start the application
+# Launch
 chmod +x run.sh
 ./run.sh
 ```
 
-Once started, open your browser and navigate to: **http://localhost:8443**
+Once started, open your browser at: **http://localhost:8443**
 
-### Method 2: Manual Setup
+### Option 2: Manual Launch
 
 ```bash
 # Create virtual environment
@@ -104,22 +137,22 @@ source venv/bin/activate
 # Install dependencies
 pip install -r requirements.txt
 
-# Start backend server
+# Start the server
 cd backend
 python -m uvicorn main:app --host 127.0.0.1 --port 8443 --reload
 ```
 
-### Method 3: Docker Compose
+### Option 3: Docker Compose
 
 ```bash
-# Production mode
+# Production (heuristic engine only)
 docker compose up -d
 
-# Development mode (with hot-reload)
-docker compose -f docker-compose.yml -f docker-compose.override.yml up
+# With Ollama local LLM
+docker compose --profile llm up -d
 ```
 
-> **GPU Acceleration**: Uncomment the GPU configuration block under the Ollama service in `docker-compose.yml` to enable NVIDIA GPU support.
+> **GPU acceleration**: Uncomment the GPU configuration for the Ollama service in `docker-compose.yml` to enable NVIDIA GPU support.
 
 ---
 
@@ -127,35 +160,50 @@ docker compose -f docker-compose.yml -f docker-compose.override.yml up
 
 ```
 BlueHound/
-├── backend/                    # FastAPI Backend
-│   ├── main.py                 # API server, routing, middlewares, and safety controls
-│   ├── ingest.py               # Multi-format log parser and normalization engine
-│   ├── graph_engine.py         # NetworkX graph engine (process tree + network topology)
-│   ├── threat_rules.py         # YAML Playbook rules engine + SSH correlation detection
-│   ├── llm_analyzer.py         # LLM semantic analysis (Ollama/OpenAI/Heuristic fallback)
-│   ├── mitre_mapper.py         # MITRE ATT&CK offline mapping table
-│   ├── query_builder.py        # KQL / SPL / Sigma query generator
-│   └── sample_data/            # Pre-installed sample datasets
-├── frontend/                   # Static Frontend
-│   ├── index.html              # Single Page Application (SPA)
-│   ├── css/main.css            # Styles (Dark Theme)
+├── backend/                        # FastAPI backend
+│   ├── main.py                     # API server, routes, middleware, security
+│   ├── ingest.py                   # Multi-format log parsing & normalization engine
+│   ├── graph_engine.py             # NetworkX graph engine (process tree + network topology)
+│   ├── threat_rules.py             # YAML Playbook rule engine + SSH correlation detection
+│   ├── llm_analyzer.py             # LLM semantic analysis (Ollama/OpenAI/heuristic fallback)
+│   ├── llm_schema.py               # LLM JSON output structured validation (CR-2)
+│   ├── hunt_ir.py                  # Hunt Query IR validation + deterministic executor (FR-1)
+│   ├── embeddings.py               # Embedding similarity layer (FR-4, local-first)
+│   ├── feedback_store.py           # Analyst feedback persistence + few-shot retrieval (FR-5)
+│   ├── triage.py                   # Incident correlation + human-on-the-loop triage model
+│   ├── triage_store.py             # Triage state persistence (JSON)
+│   ├── session_store.py            # Bounded, TTL'd server-side event cache
+│   ├── model_governance.py         # Model provenance tracking + token budgets (CR-5, CR-8)
+│   ├── pdf_report.py               # PDF session report (ReportLab)
+│   ├── regex_safety.py             # ReDoS protection + bounded regex execution
+│   ├── mitre_mapper.py             # MITRE ATT&CK offline lookup table
+│   ├── query_builder.py            # KQL / SPL / Sigma query generator
+│   ├── http_client.py              # Shared httpx async client
+│   ├── time_utils.py               # Timestamp parsing utilities
+│   └── sample_data/                # Built-in sample datasets
+├── frontend/                       # Static frontend (SPA)
+│   ├── index.html                  # Single-page application
+│   ├── css/main.css                # Styles (dark theme)
 │   ├── js/
-│   │   ├── app.js              # Core application logic
-│   │   ├── graph.js            # D3.js force-directed graph
-│   │   ├── timeline.js         # Timeline visualization
-│   │   ├── process_tree.js     # Process tree visualization
-│   │   ├── hunt_panel.js       # Hunting panel
-│   │   ├── llm_panel.js        # LLM analysis panel
-│   │   └── query_panel.js      # Query generator panel
-│   └── assets/                 # Static assets
+│   │   ├── app.js                  # Core application logic
+│   │   ├── graph.js                # D3.js force-directed graph
+│   │   ├── timeline.js             # Timeline visualization
+│   │   ├── process_tree.js         # Process tree visualization
+│   │   ├── hunt_panel.js           # Rule-based hunting panel
+│   │   ├── llm_panel.js            # LLM analysis panel + feedback UI
+│   │   ├── nlhunt_panel.js         # Natural-language hunt panel (FR-1)
+│   │   ├── hypotheses_panel.js     # AI hypothesis generation panel (FR-2)
+│   │   ├── incidents_panel.js      # Incident triage panel
+│   │   ├── query_panel.js          # Query generator panel
+│   │   └── utils.js                # Shared utility functions
+│   └── assets/                     # Static resources (favicon, etc.)
 ├── playbooks/
-│   └── windows_hunting.yaml    # Threat hunting playbook (24 rules)
-├── Dockerfile                  # Multi-stage build (builder + runtime)
-├── docker-compose.yml          # Production deployment configuration (includes Ollama)
-├── docker-compose.override.yml # Development override configurations
-├── requirements.txt            # Python dependencies
-├── run.sh                      # One-click startup script
-└── .env.example                # Environment variables template
+│   └── windows_hunting.yaml        # Threat hunting playbook (25 rules)
+├── Dockerfile                      # Multi-stage build (builder + runtime)
+├── docker-compose.yml              # Production deployment (with Ollama profile)
+├── requirements.txt                # Python dependencies
+├── run.sh                          # One-command launch script
+└── .env.example                    # Environment variable template
 ```
 
 ### Data Flow
@@ -169,22 +217,27 @@ BlueHound/
           │  LogIngester   │  Parse → Normalize (60+ field aliases)
           └────────┬───────┘
                    ▼
-      ┌─────────────┼─────────────┐
-      ▼             ▼             ▼
-┌─────────┐  ┌──────────┐  ┌──────────┐
-│ LLM Pre │  │  Rule    │  │  Graph   │
-│  Scan   │  │  Engine  │  │  Engine  │
-│(heuris.)│  │ (YAML)   │  │(NetworkX)│
-└────┬────┘  └────┬─────┘  └────┬─────┘
-     │            │             │
-     └────────────┼─────────────┘
+     ┌─────────────┼──────────────────┐
+     ▼             ▼                  ▼
+┌─────────┐  ┌──────────┐  ┌───────────────┐
+│ LLM Pre │  │  Rule    │  │  Graph Engine  │
+│  Scan   │  │  Engine  │  │  (NetworkX)    │
+│(3-tier) │  │ (YAML)   │  │               │
+└────┬────┘  └────┬─────┘  └──────┬────────┘
+     │            │               │
+     └────────────┼───────────────┘
                   ▼
          ┌────────────────┐
-         │  API Response  │  events + findings + graph + facets
+         │  Correlation   │  Incident correlation + embedding similarity
          └────────┬───────┘
                   ▼
          ┌────────────────┐
-         │   Frontend     │  D3.js Graph / Timeline / Hunt Panel
+         │  API Response  │  events + findings + incidents + graph
+         └────────┬───────┘
+                  ▼
+         ┌────────────────┐
+         │   Frontend     │  Graph / Timeline / Hunt / Hypotheses /
+         │                │  Incidents / NL Hunt / PDF Export
          └────────────────┘
 ```
 
@@ -192,33 +245,76 @@ BlueHound/
 
 ## 📡 API Reference
 
-All endpoints bind to `http://localhost:8443` by default. If `BLUEHOUND_API_KEY` is configured, you must include the `X-API-Key` header in requests.
+All endpoints are bound to `http://localhost:8443` by default.
+
+### Authentication
+
+- Set `BLUEHOUND_API_KEY`: API clients use the `X-API-Key` header.
+- Set `BLUEHOUND_API_KEYS`: Supports per-analyst keys (`alice:key1,bob:key2`); identity is server-derived from the key and cannot be spoofed.
+- Browsers display an HTTP Basic login dialog when accessing the homepage (username is arbitrary; password is the API key).
+- `BLUEHOUND_ENV=production` without a configured key will refuse to start.
 
 ### Log Upload & Analysis
 
 | Method | Endpoint | Description | Rate Limit |
-|--------|----------|------|------|
-| `POST` | `/api/upload` | Upload log files (max 200MB) | 10/min |
-| `GET` | `/api/sample?dataset=enterprise` | Load pre-installed sample dataset | 30/min |
+|--------|----------|-------------|------------|
+| `POST` | `/api/upload` | Upload log file (max 200 MB) | 10/min |
+| `GET` | `/api/sample?dataset=enterprise` | Load built-in sample dataset | 30/min |
 
-**Supported Datasets**: `enterprise`, `redteam`, `chaos`
+**Available datasets**: `enterprise`, `redteam`, `chaos`
 
 ### LLM Analysis
 
 | Method | Endpoint | Description | Rate Limit |
-|--------|----------|------|------|
-| `POST` | `/api/llm/analyze` | Semantic analysis for a single command line | 10/min |
+|--------|----------|-------------|------------|
+| `POST` | `/api/llm/analyze` | Single command-line semantic analysis | 10/min |
 | `POST` | `/api/llm/summarize` | Session-level threat summary | 5/min |
+| `POST` | `/api/llm/hypotheses` | AI hypothesis generation (FR-2) | 5/min |
+| `POST` | `/api/llm/similar` | Embedding similarity lookup (FR-4) | 20/min |
+
+### Natural-Language Hunting (FR-1)
+
+| Method | Endpoint | Description | Rate Limit |
+|--------|----------|-------------|------------|
+| `POST` | `/api/hunt/nl` | NL → Hunt Query IR → deterministic execution | 10/min |
+| `POST` | `/api/hunt/execute` | Execute Hunt Query IR directly (no model) | 30/min |
+
+### Analyst Feedback (FR-5)
+
+| Method | Endpoint | Description | Rate Limit |
+|--------|----------|-------------|------------|
+| `POST` | `/api/feedback` | Submit verdict feedback (agree/disagree + correction) | 30/min |
+| `GET` | `/api/feedback/export` | Export JSONL annotated dataset | 10/min |
+
+### Incident Triage
+
+| Method | Endpoint | Description | Rate Limit |
+|--------|----------|-------------|------------|
+| `GET` | `/api/triage` | List all triage decisions | 60/min |
+| `POST` | `/api/triage` | Update incident triage status / priority | 60/min |
+| `POST` | `/api/triage/finding` | Exclude/restore individual findings in an incident | 120/min |
+
+### Report Export
+
+| Method | Endpoint | Description | Rate Limit |
+|--------|----------|-------------|------------|
+| `POST` | `/api/report/pdf` | Export PDF session report | 10/min |
 
 ### Queries & Rules
 
 | Method | Endpoint | Description | Rate Limit |
-|--------|----------|------|------|
+|--------|----------|-------------|------------|
 | `POST` | `/api/query/build` | Generate KQL / SPL / Sigma queries | 60/min |
-| `GET` | `/api/rules` | List loaded Playbook rules | 30/min |
-| `GET` | `/api/mitre/{technique_id}` | Query MITRE ATT&CK technique details | 60/min |
+| `GET` | `/api/rules` | List loaded playbook rules | 30/min |
+| `GET` | `/api/mitre/{technique_id}` | MITRE ATT&CK technique lookup | 60/min |
 
-### Example: Upload and Analyze
+### Health Check
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/healthz` | Service health check (no auth required) |
+
+### Example: Upload & Analyze
 
 ```bash
 curl -X POST http://localhost:8443/api/upload \
@@ -226,7 +322,19 @@ curl -X POST http://localhost:8443/api/upload \
   -F "file=@/path/to/sysmon_logs.json"
 ```
 
-### Example: Command Line Analysis
+### Example: Natural-Language Hunt
+
+```bash
+curl -X POST http://localhost:8443/api/hunt/nl \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: YOUR_KEY" \
+  -d '{
+    "session_id": "YOUR_SESSION_ID",
+    "question": "Which accounts executed PowerShell encoded commands in the last hour?"
+  }'
+```
+
+### Example: Command-Line Analysis
 
 ```bash
 curl -X POST http://localhost:8443/api/llm/analyze \
@@ -246,35 +354,54 @@ curl -X POST http://localhost:8443/api/llm/analyze \
 
 ## 🔐 Security Hardening
 
-BlueHound enforces defense-in-depth principles right from the design phase, mapping against OWASP Top 10 guidelines:
+BlueHound incorporates OWASP Top 10 and OWASP LLM Top 10 security guidelines from the design phase, implementing defense-in-depth:
 
-### Implemented Safeguards
+### Implemented Protections
 
-| ID | Category | Safeguards & Security Control |
-|----|------|----------|
-| VULN-01 | Authentication | API Key authentication (`BLUEHOUND_API_KEY`) |
-| VULN-03 | Resource Management | Chunked file uploads (2MB chunks), max file size limit of 200MB, event parsing threshold at 150K events |
-| VULN-04 | CORS | Restrictive CORS whitelist (never `*`) |
-| VULN-06 | Injection | Escaped outputs for generated KQL/SPL/Sigma queries |
-| VULN-07 | Network | Default binding to localhost (127.0.0.1) instead of 0.0.0.0 |
-| VULN-10 | XXE | XML External Entity protection using `defusedxml` |
-| VULN-14 | Supply Chain | Dependency vulnerability scanning with `pip-audit` |
-| VULN-15 | LLM Security | Input sanitization and prompt injection detection |
-| VULN-17 | SSRF | Whitelist validation for Ollama connection URL |
-| VULN-19 | CSP | Robust Content-Security-Policy headers |
-| VULN-20 | DoS | Per-IP rate limiting powered by slowapi |
-| VULN-21 | Information Disclosure | Global generic error handler preventing traceback exposure |
-| VULN-22 | Key Management | API Key read directly from environment variables on every request (no caching in memory) |
-| VULN-23 | Context Injection | Strict whitelist constraints for LLM `event_context` fields |
-| VULN-24 | Log Injection | Filename sanitization (filtering path traversals and control characters) |
+| ID | Category | Protection |
+|----|----------|------------|
+| VULN-01 | Authentication | API Key / HTTP Basic auth; per-analyst key support; production fails closed without key |
+| VULN-03 | Resource Management | Streaming upload, JSON body/field limits, model output token cap |
+| VULN-04 | CORS | Restrictive CORS allowlist (not `*`) |
+| VULN-06 | Injection | KQL/SPL literal escaping, Sigma uses YAML serializer |
+| VULN-07 | Network | Binds to localhost (127.0.0.1) by default, not 0.0.0.0 |
+| VULN-10 | XXE | `defusedxml` for XML External Entity prevention |
+| VULN-14 | Supply Chain | `pip-audit` dependency vulnerability scanning |
+| VULN-15 | LLM Safety | Skips model on prompt injection detection, structured prompts, deterministic severity floor |
+| VULN-17 | SSRF | Ollama URL allowlist validation |
+| VULN-19 | CSP | Content-Security-Policy headers, self-hosted D3 |
+| VULN-20 | DoS | Per-IP rate limiting (slowapi) |
+| VULN-21 | Info Leak | Generic error handler, no stack trace exposure |
+| VULN-22 | Key Management | API key read from env on every request, never cached in memory |
+| VULN-23 | Context Injection | LLM event_context field allowlist |
+| VULN-24 | Log Injection | Filename sanitization (strip control chars, path traversal) |
+
+### LLM-Specific Security (OWASP LLM Top 10)
+
+| Control | Protection |
+|---------|------------|
+| CR-1 | LLM is an auxiliary signal; deterministic rules lead; embedding similarity never overrides rule verdicts |
+| CR-2 | All LLM outputs validated via `llm_schema.py`; Hunt Query IR uses whitelisted fields + operators |
+| CR-3 | Vector store holds only numbers/IDs/labels — never replays raw log text into prompts |
+| CR-5 | Per-request / per-session token budgets to prevent runaway costs |
+| CR-8 | Every response stamped with `model_id` + `source` provenance |
+| LLM04 | Few-shot draws only from trusted analysts; disputed labels are excluded (anti-poisoning) |
+
+### ReDoS Protection
+
+- `regex_safety.py` pre-validates all user-submitted / LLM-generated regex patterns
+- Nested quantifier detection (catastrophic backtracking pattern rejection)
+- Per-IR cumulative time budget (`BLUEHOUND_IR_REGEX_BUDGET_S`)
+- Search text truncation limit (16,384 characters)
 
 ### Docker Security
 
-- **Non-root Execution**: Runs under the unprivileged `bluehound` user inside the container.
-- **Read-Only Root Filesystem**: Enforced `read_only: true` with `tmpfs` mounts for temporary workspaces like /tmp.
-- **Capabilities Dropping**: `cap_drop: ALL` drops all kernel capabilities.
-- **Network Isolation**: Placed in an isolated bridge network `172.28.0.0/24`.
-- **Security Headers**: Includes X-Content-Type-Options, X-Frame-Options, Referrer-Policy, and Permissions-Policy.
+- **Non-root execution**: Runs as `bluehound` user inside the container
+- **Read-only root filesystem**: `read_only: true` + `tmpfs` for /tmp
+- **Capability drop**: `cap_drop: ALL`
+- **Isolated network**: Dedicated bridge network `172.28.0.0/24`
+- **Security headers**: X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy
+- **Persistent volume**: Triage/feedback state persisted via `bluehound-state` volume
 
 ---
 
@@ -321,25 +448,64 @@ BlueHound enforces defense-in-depth principles right from the design phase, mapp
 
 ---
 
-## ⚙️ Environment Configuration
+## ⚙️ Configuration
 
-All configurations are managed via a `.env` file or system environment variables. For a complete list of options, see [`.env.example`](.env.example).
+All settings are managed via `.env` file or environment variables. See [`.env.example`](.env.example) for the full list.
 
-| Variable | Default Value | Description |
-|------|--------|------|
-| `LLM_BACKEND` | `fallback` | LLM backend engine: `ollama` / `openai` / `fallback` |
-| `OLLAMA_URL` | `http://localhost:11434` | Ollama connection endpoint URL |
+### Core Settings
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `LLM_BACKEND` | `fallback` | LLM engine: `ollama` / `openai` / `fallback` |
+| `ALLOW_CLOUD_FALLBACK` | `false` | Allow fallback to OpenAI when Ollama fails |
+| `LLM_MAX_OUTPUT_TOKENS` | `1200` | Max model output tokens |
+| `OLLAMA_URL` | `http://localhost:11434` | Ollama service URL |
 | `OLLAMA_MODEL` | `llama3.2` | Ollama model name |
-| `OPENAI_API_KEY` | *(Empty)* | OpenAI API secret key |
+| `OLLAMA_EMBED_MODEL` | `nomic-embed-text` | Ollama embedding model (FR-4) |
+| `OPENAI_API_KEY` | *(empty)* | OpenAI API key |
 | `OPENAI_MODEL` | `gpt-4o-mini` | OpenAI model name |
-| `BLUEHOUND_HOST` | `127.0.0.1` | Backend binding address |
-| `BLUEHOUND_PORT` | `8443` | Backend server port |
-| `BLUEHOUND_API_KEY` | *(Empty)* | API key (leave blank to run in dev mode with no auth) |
-| `ALLOWED_ORIGINS` | `http://localhost:8443,...` | Allowed CORS origins |
-| `BLUEHOUND_MAX_PARSED_EVENTS` | `150000` | Maximum parsed events allowed |
-| `BLUEHOUND_MAX_RESPONSE_EVENTS` | `50000` | Maximum response events allowed |
 
-### Generating a Secure API Key
+### Server Settings
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `BLUEHOUND_HOST` | `127.0.0.1` | Server bind address |
+| `BLUEHOUND_PORT` | `8443` | Server port |
+| `BLUEHOUND_ENV` | `development` | `production` mode enforces API key |
+| `BLUEHOUND_API_KEY` | *(empty)* | Shared API key; required in production |
+| `BLUEHOUND_API_KEYS` | *(empty)* | Per-analyst keys (`alice:key1,bob:key2`) |
+| `ALLOWED_ORIGINS` | `http://localhost:8443,...` | CORS allowed origins |
+
+### Resource Limits
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `BLUEHOUND_MAX_JSON_BODY_BYTES` | `2097152` | JSON API request body limit |
+| `BLUEHOUND_MAX_PARSED_EVENTS` | `50000` | Max parsed events |
+| `BLUEHOUND_MAX_RESPONSE_EVENTS` | `10000` | Max response events |
+| `BLUEHOUND_MAX_TOKENS_PER_REQUEST` | `8000` | Per-request token limit |
+| `BLUEHOUND_MAX_TOKENS_PER_SESSION` | `200000` | Per-session token limit |
+
+### Persistence & Sessions
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `BLUEHOUND_STATE_DIR` | `/tmp/bluehound` | Persistent state directory |
+| `BLUEHOUND_TRIAGE_DB` | `{STATE_DIR}/triage_state.json` | Triage state file path |
+| `BLUEHOUND_FEEDBACK_DB` | `{STATE_DIR}/feedback.json` | Feedback database path |
+| `BLUEHOUND_MAX_SESSIONS` | `8` | Max concurrent sessions |
+| `BLUEHOUND_MAX_SESSION_EVENTS` | `50000` | Max cached events per session |
+| `BLUEHOUND_SESSION_TTL` | `3600` | Session TTL (seconds) |
+
+### Trust & Security
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `BLUEHOUND_TRUSTED_ANALYSTS` | *(empty)* | Trusted analyst list (comma-separated) |
+| `BLUEHOUND_FEWSHOT_TRUST_MIN` | `0.9` | Minimum trust threshold for few-shot |
+| `BLUEHOUND_IR_REGEX_BUDGET_S` | `0.25` | Per-IR regex cumulative time budget (seconds) |
+
+### Generate a Secure API Key
 
 ```bash
 python3 -c "import secrets; print(secrets.token_hex(32))"
@@ -349,11 +515,11 @@ python3 -c "import secrets; print(secrets.token_hex(32))"
 
 ## 📝 Custom Playbook Rules
 
-Threat detection rules are defined in [`playbooks/windows_hunting.yaml`](playbooks/windows_hunting.yaml) using the following format:
+Threat detection rules are defined in [`playbooks/windows_hunting.yaml`](playbooks/windows_hunting.yaml) with the following format:
 
 ```yaml
 rules:
-  - id: TH-025
+  - id: TH-026
     name: "Custom Rule Name"
     mitre: T1059.001
     tactic: Execution
@@ -361,37 +527,39 @@ rules:
     match:
       process_name: ["powershell.exe"]
       commandline_regex: "(?i)(your-pattern-here)"
-    description: "Describes what this custom rule detects."
-    hunt_guidance: "Provides next steps/actions for threat analysts."
+    description: "Describe what this rule detects."
+    hunt_guidance: "Provide next-step recommendations for the analyst."
 ```
 
-### Supported Match Criteria
+### Supported Match Conditions
 
-| Parameter | Type | Description |
-|------|------|------|
-| `process_name` | string / list | Exact process name matching |
-| `event_id` | int / list | Event ID matching |
-| `commandline_regex` | string | Regular expression matching on the command line |
-| `process_path_regex` | string | Regular expression matching on the process execution path |
-| `properties_regex` | string | Regular expression matching on AD properties (EID 4662) |
-| `event_outcome` | string / list | Event execution outcome (failed/success) |
-| `action_type` | string / list | Event action type |
+| Condition | Type | Description |
+|-----------|------|-------------|
+| `process_name` | string / list | Exact process name match |
+| `event_id` | int / list | Event ID match |
+| `commandline_regex` | string | Command-line regex match |
+| `process_path_regex` | string | Process path regex match |
+| `properties_regex` | string | AD properties regex match (EID 4662) |
+| `event_outcome` | string / list | Event outcome (failed/success) |
+| `action_type` | string / list | Action type |
 | `event_category` | string / list | Event category |
-| `parent_child_anomaly` | bool | Abnormal parent-child process relationship detection |
+| `parent_child_anomaly` | bool | Anomalous parent-child process relationship |
 
 ---
 
-## 🧰 Technology Stack
+## 🧰 Tech Stack
 
-| Layer | Technologies |
-|------|------|
+| Layer | Technology |
+|-------|------------|
 | **Backend Framework** | FastAPI 0.138 + Uvicorn |
 | **Graph Engine** | NetworkX |
 | **Log Parsing** | json / csv / defusedxml / python-evtx |
 | **LLM Integration** | httpx → Ollama API / OpenAI API |
+| **Embedding Models** | Ollama (nomic-embed-text) / OpenAI / hashed char-n-gram fallback |
+| **PDF Reports** | ReportLab |
 | **Rate Limiting** | slowapi |
-| **Frontend Rendering**| Vanilla JS + D3.js (Force-directed Graph / Timeline) |
-| **Containerization** | Docker multi-stage + Compose |
+| **Frontend** | Vanilla JS + D3.js (force-directed graph / timeline) |
+| **Containerization** | Docker multi-stage + Compose (with Ollama profile) |
 | **Security Audit** | pip-audit |
 
 ---
@@ -401,31 +569,20 @@ rules:
 ### Local Development
 
 ```bash
-# Install development dependencies
+# Install dependencies
 pip install -r requirements.txt
 
-# Start backend with hot reload enabled
+# Start (with hot reload)
 cd backend
 python -m uvicorn main:app --host 127.0.0.1 --port 8443 \
   --reload --reload-include "*.yaml" --reload-include "*.yml"
 ```
 
-### Dependency Vulnerability Audit
+### Dependency Security Audit
 
 ```bash
 pip-audit --desc on
 ```
-
-### Docker Development Mode
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.override.yml up --build
-```
-
-Dev mode details:
-- Source code is mounted as a volume supporting hot-reload.
-- API Key verification is disabled.
-- Read-only root filesystem restriction is disabled.
 
 ---
 

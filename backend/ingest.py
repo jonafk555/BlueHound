@@ -1,7 +1,9 @@
 """Log ingestion and normalization engine for BlueHound."""
-import json, csv, re, hashlib, uuid, os
+import json, csv, re, hashlib, uuid, os, ntpath
 from pathlib import Path
 from datetime import datetime
+
+from time_utils import parse_ts
 # VULN-10: use defusedxml to prevent XXE attacks in uploaded XML files
 try:
     import defusedxml.ElementTree as ET
@@ -14,7 +16,10 @@ logger = logging.getLogger("bluehound.ingest")
 
 # Large-file thresholds
 LARGE_FILE_BYTES = 50 * 1024 * 1024  # 50 MB — switch to streaming mode above this
-DEFAULT_MAX_EVENTS = int(os.getenv("BLUEHOUND_MAX_PARSED_EVENTS", "150000"))
+# Default aligned with main.MAX_PARSED_EVENTS. Two different defaults for the
+# same env var used to be a latent trap — when main didn't pass max_events the
+# ingester silently accepted 3× more events than the API caller expected.
+DEFAULT_MAX_EVENTS = int(os.getenv("BLUEHOUND_MAX_PARSED_EVENTS", "50000"))
 JSON_READ_CHUNK = 1024 * 1024
 
 # Increase CSV field size limit for large log exports (default 128KB is too small)
@@ -29,10 +34,13 @@ CANONICAL_FIELDS = {
     "hostname": ["HostName", "hostname", "Computer", "ComputerName", "agent.hostname", "agent.name", "host.hostname", "host.name", "host", "MachineName"],
     "host_ip": ["HostIP", "host.ip", "IpAddress", "source.address"],
     # Process Execution
-    "process_guid": ["ProcessGuid", "ProcessId", "process.entity_id", "EntityId", "process.pid"],
+    # NOTE: SourceProcessGUID / SourceImage are last-priority aliases so they only
+    # populate for Sysmon EID 10/8 (ProcessAccess / CreateRemoteThread) events,
+    # where the *source* (accessing/injecting) process is the actor of interest.
+    "process_guid": ["ProcessGuid", "ProcessId", "process.entity_id", "EntityId", "process.pid", "SourceProcessGUID", "SourceProcessGuid"],
     "parent_process_guid": ["ParentProcessGuid", "ParentProcessId", "process.parent.entity_id"],
-    "process_name": ["ProcessName", "process_name", "Image", "process.name", "NewProcessName", "FileName"],
-    "process_path": ["ProcessPath", "Image", "process.executable", "NewProcessName"],
+    "process_name": ["ProcessName", "process_name", "Image", "process.name", "NewProcessName", "FileName", "SourceImage"],
+    "process_path": ["ProcessPath", "Image", "process.executable", "NewProcessName", "SourceImage"],
     "parent_process_name": ["ParentImage", "ParentProcessName", "parent_process", "ParentCommandLine", "process.parent.name"],
     "commandline": ["CommandLine", "command_line", "process.command_line", "cmdline", "ProcessCommandLine"],
     "parent_commandline": ["ParentCommandLine", "parent_command_line", "process.parent.command_line"],
@@ -67,6 +75,11 @@ CANONICAL_FIELDS = {
     "object_guid": ["ObjectGuid", "ObjectName", "SubjectDomainName"],
     "access_mask": ["AccessMask", "access_mask"],
     "object_type": ["ObjectType", "object_type"],
+    # Process Access (Sysmon EID 10) — credential-dumping detection. These were
+    # previously dropped during normalization, hiding LSASS access from the rules.
+    "target_image": ["TargetImage"],
+    "granted_access": ["GrantedAccess"],
+    "call_trace": ["CallTrace"],
     # Log message content (Elastic / syslog)
     "message": ["message", "Message", "msg", "log.message"],
 }
@@ -497,7 +510,6 @@ class LogIngester:
             seed = f"{norm.get('hostname','')}-{norm.get('parent_process_name','')}-parent"
             norm["parent_process_guid"] = str(uuid.uuid5(uuid.NAMESPACE_DNS, seed))
         # Extract process name from path — use ntpath for Windows paths on any OS
-        import ntpath
         if "process_name" not in norm and "process_path" in norm:
             norm["process_name"] = ntpath.basename(norm["process_path"])
         if "parent_process_name" in norm and ("\\" in str(norm["parent_process_name"]) or "/" in str(norm["parent_process_name"])):
@@ -508,6 +520,10 @@ class LogIngester:
             pn = norm["process_name"]
             norm["process_path"] = pn
             norm["process_name"] = ntpath.basename(pn)
+        # Normalize the timestamp to epoch seconds ONCE here (see time_utils.py).
+        # Downstream code must sort/compare on `_ts`, never on the raw string —
+        # mixed-format inputs (ISO + Kibana + epoch) misorder as strings.
+        norm["_ts"] = parse_ts(norm.get("timestamp"))
         return norm
 
     def extract_facets(self, events: List[Dict]) -> Dict[str, List]:

@@ -1,9 +1,10 @@
 """Graph engine — builds process tree and network topology for D3.js."""
+import os
 from typing import List, Dict, Any
 
 
-MAX_GRAPH_NODES = int(__import__('os').getenv('BLUEHOUND_MAX_GRAPH_NODES', '500'))
-MAX_GRAPH_EDGES = int(__import__('os').getenv('BLUEHOUND_MAX_GRAPH_EDGES', '2000'))
+MAX_GRAPH_NODES = int(os.getenv('BLUEHOUND_MAX_GRAPH_NODES', '500'))
+MAX_GRAPH_EDGES = int(os.getenv('BLUEHOUND_MAX_GRAPH_EDGES', '2000'))
 
 
 class GraphEngine:
@@ -83,7 +84,7 @@ class GraphEngine:
                     existing["mitre"] = list(set(existing.get("mitre", []) + [r.get("mitre", "") for r in matched_rules]))
                     existing["rules"] = existing.get("rules", []) + [{"id": r["rule_id"], "name": r["rule_name"], "severity": r["severity"]} for r in matched_rules]
 
-            # Parent → Child edge
+            # Parent → Child edge. Dedup happens below over the full edge set.
             if ppguid and ppguid != pguid:
                 if ppguid not in nodes_map:
                     nodes_map[ppguid] = {
@@ -99,7 +100,6 @@ class GraphEngine:
                         "mitre": [],
                         "rules": [],
                     }
-                edge_key = f"{ppguid}->{pguid}"
                 edges.append({
                     "source": ppguid,
                     "target": pguid,

@@ -1,27 +1,33 @@
 """Threat rule engine — loads YAML playbooks and evaluates events."""
 import re, yaml, logging
-from functools import lru_cache
 from pathlib import Path
 from typing import List, Dict, Any
 
+# Regex hardening lives in regex_safety.py so the rule engine, the FR-1 IR
+# executor, and the FR-3 rule generator all share one ReDoS-safe implementation.
+# Re-exported here for backward compatibility (tests/test_redos.py imports these).
+from regex_safety import MAX_REGEX_TEXT, _compile_rule_regex, safe_search as _safe_search
+from time_utils import event_ts
+
 logger = logging.getLogger(__name__)
 
-MAX_REGEX_TEXT = 16_384
 
-@lru_cache(maxsize=256)
-def _compile_rule_regex(pattern: str):
-    return re.compile(pattern)
+# Sysmon EID 10 GrantedAccess bits that indicate credential theft against LSASS,
+# as opposed to benign query-only access (0x1000 PROCESS_QUERY_LIMITED_INFORMATION).
+#   0x0002 CREATE_THREAD · 0x0008 VM_OPERATION · 0x0010 VM_READ
+#   0x0020 VM_WRITE      · 0x0040 DUP_HANDLE
+DANGEROUS_GRANTED_ACCESS_BITS = 0x0002 | 0x0008 | 0x0010 | 0x0020 | 0x0040  # 0x7A
 
 
-def _safe_search(pattern: str, text: str) -> bool:
-    """Bounded regex search for trusted playbook patterns against untrusted logs."""
-    if not text:
+def _granted_access_is_dangerous(value) -> bool:
+    """True if a Sysmon GrantedAccess mask includes memory-read / handle-dup rights."""
+    if value in (None, ""):
         return False
     try:
-        return bool(_compile_rule_regex(pattern).search(str(text)[:MAX_REGEX_TEXT]))
-    except re.error as exc:
-        logger.error("Invalid regex pattern %r: %s", pattern[:60], exc)
+        mask = int(str(value).strip(), 16)
+    except (ValueError, TypeError):
         return False
+    return bool(mask & DANGEROUS_GRANTED_ACCESS_BITS)
 
 class ThreatRuleEngine:
     """Loads hunting playbook YAML and evaluates events against rules."""
@@ -39,7 +45,7 @@ class ThreatRuleEngine:
 
     def _validate_regexes(self):
         """Fail closed for invalid playbook regexes during startup."""
-        regex_keys = ("commandline_regex", "process_path_regex", "properties_regex", "object_guid_regex")
+        regex_keys = ("commandline_regex", "process_path_regex", "properties_regex", "object_guid_regex", "target_image_regex")
         valid_rules = []
         for rule in self.rules:
             match = rule.get("match", {})
@@ -53,7 +59,12 @@ class ThreatRuleEngine:
         self.rules = valid_rules
 
     def evaluate_all(self, events: List[Dict]) -> List[Dict]:
-        """Evaluate all events against all rules. Returns list of findings."""
+        """Evaluate all events against all rules. Returns deduplicated findings.
+
+        Dedup key: (rule_id, process_guid, source_ip, user_name) — keeps the
+        first finding per unique threat tuple so per-event repeats collapse to
+        a single signal across the UI (stats bar, hunt panel, process tree).
+        """
         findings = []
         for ev in events:
             for rule in self.rules:
@@ -76,10 +87,31 @@ class ThreatRuleEngine:
                         "source_ip": ev.get("source_ip", ""),
                         "event_outcome": ev.get("event_outcome", ""),
                         "action_type": ev.get("action_type", ""),
+                        "target_image": ev.get("target_image", ""),
+                        "granted_access": ev.get("granted_access", ""),
                     })
         # Correlation-based detection (cross-event patterns)
         findings.extend(self._correlate_ssh_bruteforce(events))
-        return findings
+        return self._dedupe_findings(findings)
+
+    @staticmethod
+    def _dedupe_findings(findings: List[Dict]) -> List[Dict]:
+        """Collapse duplicate findings — same rule on same process / source / user is one threat."""
+        seen = set()
+        deduped: List[Dict] = []
+        for f in findings:
+            key = (
+                f.get("rule_id", ""),
+                f.get("process_guid", "") or f.get("commandline", ""),
+                f.get("source_ip", ""),
+                f.get("user_name", ""),
+                f.get("hostname", ""),
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append(f)
+        return deduped
 
     # Invalid/unknown user patterns in auditd/syslog
     _INVALID_USER_PATTERNS = frozenset([
@@ -115,8 +147,11 @@ class ThreatRuleEngine:
 
         findings = []
         for src_ip, src_events in ssh_by_src.items():
-            # Sort by timestamp
-            sorted_evs = sorted(src_events, key=lambda e: e.get("timestamp", ""))
+            # Sort by parsed epoch — raw string sort misorders mixed formats.
+            sorted_evs = sorted(
+                src_events,
+                key=lambda e: (event_ts(e) is None, event_ts(e) or 0.0),
+            )
 
             # Separate into phases
             invalid_failures = []   # failures with invalid/unknown users
@@ -335,16 +370,24 @@ class ThreatRuleEngine:
             if not _safe_search(path_regex, ppath):
                 return False
 
-        # Parent-child anomaly check
+        # Parent-child anomaly check.
+        #
+        # Previously this branch had an unconditional `return False` at the end
+        # which silently overrode every already-passed constraint above it —
+        # combining process_name / event_id / parent_child_anomaly in the same
+        # rule failed to fire even when every part matched. It is now a plain
+        # AND: if the anomaly *positively* matches, accept; if the event isn't
+        # in the anomaly table, fall through to the "any other constraint"
+        # summary check at the bottom so mixed rules still work.
+        parent_child_matched = None  # None = not evaluated, True/False = evaluated
         if match.get("parent_child_anomaly"):
             suspicious = match.get("suspicious_parents", {})
             ev_pn = (event.get("process_name") or "").lower()
             ev_ppn = (event.get("parent_process_name") or "").lower()
-            if ev_pn in [k.lower() for k in suspicious]:
-                expected_parents = [p.lower() for p in suspicious.get(ev_pn, suspicious.get(event.get("process_name",""), []))]
-                if ev_ppn in expected_parents:
-                    return True
-            return False
+            lookup = {k.lower(): [p.lower() for p in v] for k, v in suspicious.items()}
+            parent_child_matched = (ev_pn in lookup and ev_ppn in lookup[ev_pn])
+            if not parent_child_matched:
+                return False
 
         # Properties/ObjectGuid regex — for EID 4662 (DCSync) and AD object access
         props_regex = match.get("properties_regex") or match.get("object_guid_regex")
@@ -356,10 +399,24 @@ class ThreatRuleEngine:
             if not _safe_search(props_regex, combined):
                 return False
 
-        # If we have any matching constraint and got here, it matched
+        # TargetImage regex — Sysmon EID 10/8 ProcessAccess target (e.g. lsass.exe)
+        target_regex = match.get("target_image_regex")
+        if target_regex:
+            target_val = event.get("target_image", "") or ""
+            if not _safe_search(target_regex, target_val):
+                return False
+
+        # GrantedAccess bitmask — credential-theft access rights against the target
+        if match.get("granted_access_dangerous"):
+            if not _granted_access_is_dangerous(event.get("granted_access", "")):
+                return False
+
+        # If we have any matching constraint and got here, it matched.
         if any(k in match for k in ("process_name", "event_id", "commandline_regex",
                                     "process_path_regex", "properties_regex", "object_guid_regex",
-                                    "event_outcome", "action_type", "event_category")):
+                                    "event_outcome", "action_type", "event_category",
+                                    "target_image_regex", "granted_access_dangerous",
+                                    "parent_child_anomaly")):
             return True
 
         return False
